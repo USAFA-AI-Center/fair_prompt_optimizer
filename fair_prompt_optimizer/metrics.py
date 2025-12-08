@@ -1,22 +1,4 @@
-"""
-metrics.py
-==========
-
-Common evaluation metrics for prompt optimization.
-
-These metrics are designed to work with DSPy's optimization loop and can be
-used directly with FAIRPromptOptimizer.optimize_*() methods.
-
-All metrics follow the signature:
-    metric(example, prediction, trace=None) -> float | bool
-    
-Where:
-    - example: The input example with expected output
-    - prediction: The model's prediction  
-    - trace: Optional trace information (usually None)
-    
-Returns a score between 0.0 and 1.0, or a boolean.
-"""
+# metrics.py
 
 import re
 import logging

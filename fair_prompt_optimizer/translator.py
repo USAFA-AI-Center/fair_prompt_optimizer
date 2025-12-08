@@ -1,13 +1,4 @@
-"""
-translator.py
-=============
-
-Handles bidirectional translation between FAIR-LLM's PromptBuilder JSON format
-and DSPy's Module/Signature system.
-
-The JSON format serves as the contract between FAIR-LLM and this optimizer,
-ensuring FAIR-LLM never needs to import DSPy.
-"""
+# translator.py
 
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
@@ -337,6 +328,8 @@ class DSPyTranslator:
         Extract the optimized state from a DSPy module and create a new FAIR config.
         
         This is the reverse translation: DSPy optimized state -> FAIR-LLM JSON format.
+        
+        Handles both legacy DSPy (<2.5) and modern DSPy (2.5+) state structures.
         """
         # Start with a copy of the original config
         optimized = FAIRConfig(
@@ -345,21 +338,78 @@ class DSPyTranslator:
             worker_instructions=original_config.worker_instructions.copy(),
         )
         
-        # Extract optimized instructions from signature
-        if hasattr(optimized_module, 'signature') and optimized_module.signature:
-            optimized.role_definition = optimized_module.signature.instructions
+        # Get the full state
+        state = optimized_module.dump_state()
+        
+        # Extract optimized instructions and demos
+        # DSPy 2.5+ nests these under predictor names (e.g., 'predict')
+        demos = []
+        instructions = None
+        
+        # Strategy 1: Try legacy format (top-level demos)
+        if "demos" in state and state["demos"]:
+            demos = state["demos"]
+            
+        # Strategy 2: Try DSPy 2.5+ format (nested under predictor names)
+        if not demos:
+            for key, value in state.items():
+                if isinstance(value, dict):
+                    # Check for demos in this predictor's state
+                    if "demos" in value and value["demos"]:
+                        demos = value["demos"]
+                    # Check for instructions in signature
+                    if "signature" in value and isinstance(value["signature"], dict):
+                        if "instructions" in value["signature"]:
+                            instructions = value["signature"]["instructions"]
+                    # Break after finding first predictor with demos
+                    if demos:
+                        break
+        
+        # Strategy 3: Try accessing predictors directly (fallback)
+        if not demos:
+            try:
+                for name, predictor in optimized_module.named_predictors():
+                    if hasattr(predictor, 'demos') and predictor.demos:
+                        # Convert Example objects to dicts
+                        demos = [dict(d) for d in predictor.demos]
+                        break
+            except Exception:
+                pass
+        
+        # Extract instructions
+        # Strategy 1: From state (found above)
+        # Strategy 2: From module.signature (legacy)
+        if not instructions:
+            if hasattr(optimized_module, 'signature') and optimized_module.signature:
+                if hasattr(optimized_module.signature, 'instructions'):
+                    instructions = optimized_module.signature.instructions
+        
+        # Strategy 3: From predictor signature
+        if not instructions:
+            try:
+                for name, predictor in optimized_module.named_predictors():
+                    if hasattr(predictor, 'signature') and predictor.signature:
+                        if hasattr(predictor.signature, 'instructions'):
+                            instructions = predictor.signature.instructions
+                            break
+            except Exception:
+                pass
+        
+        # Set role definition (use extracted or fall back to original)
+        if instructions:
+            optimized.role_definition = instructions
         else:
             optimized.role_definition = original_config.role_definition
         
         # Preserve format instructions (these aren't optimized by DSPy)
         optimized.format_instructions = original_config.format_instructions.copy()
         
-        # Extract optimized demos and convert to FAIR-LLM example format
-        state = optimized_module.dump_state()
-        demos = state.get("demos", [])
-        
+        # Convert demos to FAIR-LLM example format
         optimized.examples = []
         for demo in demos:
+            # Handle both dict and Example objects
+            if hasattr(demo, '_store'):
+                demo = dict(demo)
             example_text = self._demo_to_example_text(demo)
             if example_text:
                 optimized.examples.append(example_text)
