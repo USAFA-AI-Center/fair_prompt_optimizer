@@ -76,7 +76,12 @@ class FAIRAgentModule(dspy.Module):
     
     def _reset_agent_memory(self):
         """Reset the agent's memory for a fresh run."""
-        self.agent.memory.clear()
+        try:
+            if hasattr(self.agent, 'memory'):
+                if hasattr(self.agent.memory, 'clear'):
+                    self.agent.memory.clear()
+        except Exception as e:
+            logger.debug(f"Could not reset agent memory: {e}")
     
     def _apply_optimized_prompt(self):
         """Apply optimized instructions from DSPy back to the agent."""

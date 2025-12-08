@@ -301,8 +301,10 @@ class DSPyTranslator:
         dspy_examples = []
         
         for ex in examples:
-            # Get the primary input (usually "user_query")
-            primary_input = ex.inputs.get("user_query", "")
+            primary_input = ex.inputs.get(self.input_field, "")
+            if not primary_input:
+                # Fall back to common field names
+                primary_input = ex.inputs.get("user_query", ex.inputs.get("query", ""))
             if not primary_input:
                 # Fall back to first input value
                 primary_input = next(iter(ex.inputs.values()), "")
