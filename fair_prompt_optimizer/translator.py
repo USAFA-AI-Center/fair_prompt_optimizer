@@ -86,20 +86,78 @@ class OptimizationMetadata:
     def from_dict(cls, data: Dict[str, Any]) -> "OptimizationMetadata":
         return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
 
+@dataclass
+class ModelConfig:
+    """Configuration for the LLM."""
+    model_name: str = "dolphin3-qwen25-3b"
+    adapter: str = "HuggingFaceAdapter"  # "HuggingFaceAdapter", "OpenAIAdapter", etc.
+    adapter_kwargs: Dict[str, Any] = field(default_factory=dict)  # Additional kwargs for adapter
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "adapter": self.adapter,
+            "adapter_kwargs": self.adapter_kwargs
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ModelConfig":
+        return cls(
+            model_name=data.get("model_name", "dolphin3-qwen25-3b"),
+            adapter=data.get("adapter", "HuggingFaceAdapter"),
+            adapter_kwargs=data.get("adapter_kwargs", {})
+        )
+    
+@dataclass
+class AgentConfig:
+    """Configuration for the agent structure."""
+    agent_type: str = "SimpleAgent"  # "SimpleAgent", future: "MultiAgentManager"
+    planner_type: str = "SimpleReActPlanner" # future: any planners that we add to fair_llm
+    max_steps: int = 10
+    tools: List[str] = field(default_factory=list)  # Tool class names: ["SafeCalculatorTool"]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "agent_type": self.agent_type,
+            "planner_type": self.planner_type,
+            "max_steps": self.max_steps,
+            "tools": self.tools
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentConfig":
+        return cls(
+            agent_type=data.get("agent_type", "SimpleAgent"),
+            planner_type=data.get("planner_type", "SimpleReActPlanner"),
+            max_steps=data.get("max_steps", 10),
+            tools=data.get("tools", [])
+        )
 
 @dataclass
 class FAIRConfig:
     """
-    Complete FAIR-LLM PromptBuilder configuration.
+    Complete FAIR-LLM agent configuration.
     
     This is the JSON contract between FAIR-LLM and the optimizer.
+    Contains everything needed to recreate an optimized agent.
     """
+    # Version for backwards compatibility
     version: str = "1.0"
+    
+    # Prompt configuration (what we optimize)
     role_definition: Optional[str] = None
     tool_instructions: List[ToolInstruction] = field(default_factory=list)
     worker_instructions: List[WorkerInstruction] = field(default_factory=list)
     format_instructions: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
+    
+    # Model configuration
+    model: ModelConfig = field(default_factory=ModelConfig)
+    
+    # Agent configuration
+    agent: AgentConfig = field(default_factory=AgentConfig)
+    
+    # Optimization metadata
     metadata: OptimizationMetadata = field(default_factory=OptimizationMetadata)
     
     def to_dict(self) -> Dict[str, Any]:
@@ -111,6 +169,8 @@ class FAIRConfig:
             "worker_instructions": [w.to_dict() for w in self.worker_instructions],
             "format_instructions": self.format_instructions,
             "examples": self.examples,
+            "model": self.model.to_dict(),
+            "agent": self.agent.to_dict(),
             "metadata": self.metadata.to_dict()
         }
     
@@ -130,18 +190,14 @@ class FAIRConfig:
             ],
             format_instructions=data.get("format_instructions", []),
             examples=data.get("examples", []),
+            model=ModelConfig.from_dict(data.get("model", {})),
+            agent=AgentConfig.from_dict(data.get("agent", {})),
             metadata=OptimizationMetadata.from_dict(data.get("metadata", {}))
         )
 
 def load_fair_config(path: str | Path) -> FAIRConfig:
     """
     Load a FAIR-LLM configuration from a JSON file.
-    
-    Args:
-        path: Path to the JSON configuration file
-        
-    Returns:
-        FAIRConfig object
     """
     with open(path, 'r') as f:
         data = json.load(f)
@@ -151,10 +207,6 @@ def load_fair_config(path: str | Path) -> FAIRConfig:
 def save_fair_config(config: FAIRConfig, path: str | Path) -> None:
     """
     Save a FAIR-LLM configuration to a JSON file.
-    
-    Args:
-        config: FAIRConfig object to save
-        path: Destination path for the JSON file
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,18 +218,6 @@ def save_fair_config(config: FAIRConfig, path: str | Path) -> None:
 def load_training_examples(path: str | Path) -> List[TrainingExample]:
     """
     Load training examples from a JSON file.
-    
-    Expected format:
-    [
-        {"inputs": {"user_query": "..."}, "expected_output": "..."},
-        ...
-    ]
-    
-    Args:
-        path: Path to JSON file containing training examples
-        
-    Returns:
-        List of TrainingExample objects
     """
     with open(path, 'r') as f:
         data = json.load(f)
@@ -227,21 +267,10 @@ class DSPyTranslator:
         Returns:
             A dynamically created DSPy Signature class
         """
-        # Build the docstring from role definition and format instructions
-        docstring_parts = []
-        
-        if config.role_definition:
-            docstring_parts.append(config.role_definition)
-        
-        if config.format_instructions:
-            docstring_parts.append("\nFormat Instructions:")
-            for fmt in config.format_instructions:
-                docstring_parts.append(f"- {fmt}")
-        
-        docstring = "\n".join(docstring_parts) if docstring_parts else "Complete the given task."
+        # Build docstring from role_definition
+        docstring = config.role_definition or "Complete the given task."
         
         # Create the signature class dynamically
-        # We use type() to create a new class with the proper docstring
         signature_dict = {
             "__doc__": docstring,
             "__annotations__": {
@@ -252,15 +281,9 @@ class DSPyTranslator:
             self.output_field: dspy.OutputField(desc="Agent's response to the user"),
         }
         
-        FAIRSignature = type("FAIRSignature", (dspy.Signature,), signature_dict)
-        
-        return FAIRSignature
+        return type("FAIRSignature", (dspy.Signature,), signature_dict)
     
-    def config_to_module(
-        self, 
-        config: FAIRConfig, 
-        use_chain_of_thought: bool = True
-    ) -> dspy.Module:
+    def config_to_module(self, config: FAIRConfig) -> dspy.Module:
         """
         Create a DSPy Module from a FAIR-LLM configuration.
         
@@ -272,11 +295,7 @@ class DSPyTranslator:
             A DSPy Module (ChainOfThought or Predict)
         """
         signature = self.config_to_signature(config)
-        
-        if use_chain_of_thought:
-            module = dspy.ChainOfThought(signature)
-        else:
-            module = dspy.Predict(signature)
+        module = dspy.Predict(signature)
         
         # If we have existing examples, convert them to demos
         if config.examples:
@@ -285,10 +304,7 @@ class DSPyTranslator:
         
         return module
     
-    def training_examples_to_dspy(
-        self, 
-        examples: List[TrainingExample]
-    ) -> List[dspy.Example]:
+    def training_examples_to_dspy(self, examples: List[TrainingExample]) -> List[dspy.Example]:
         """
         Convert FAIR training examples to DSPy Example format.
         
@@ -318,128 +334,9 @@ class DSPyTranslator:
         
         return dspy_examples
     
-    def extract_optimized_config(
-        self,
-        original_config: FAIRConfig,
-        optimized_module: dspy.Module,
-        optimizer_name: str,
-        optimizer_config: Optional[Dict[str, Any]] = None,
-        score: Optional[float] = None
-    ) -> FAIRConfig:
-        """
-        Extract the optimized state from a DSPy module and create a new FAIR config.
-        
-        This is the reverse translation: DSPy optimized state -> FAIR-LLM JSON format.
-        
-        Handles both legacy DSPy (<2.5) and modern DSPy (2.5+) state structures.
-        """
-        # Start with a copy of the original config
-        optimized = FAIRConfig(
-            version=original_config.version,
-            tool_instructions=original_config.tool_instructions.copy(),
-            worker_instructions=original_config.worker_instructions.copy(),
-        )
-        
-        # Get the full state
-        state = optimized_module.dump_state()
-        
-        # Extract optimized instructions and demos
-        # DSPy 2.5+ nests these under predictor names (e.g., 'predict')
-        demos = []
-        instructions = None
-        
-        # Strategy 1: Try legacy format (top-level demos)
-        if "demos" in state and state["demos"]:
-            demos = state["demos"]
-            
-        # Strategy 2: Try DSPy 2.5+ format (nested under predictor names)
-        if not demos:
-            for key, value in state.items():
-                if isinstance(value, dict):
-                    # Check for demos in this predictor's state
-                    if "demos" in value and value["demos"]:
-                        demos = value["demos"]
-                    # Check for instructions in signature
-                    if "signature" in value and isinstance(value["signature"], dict):
-                        if "instructions" in value["signature"]:
-                            instructions = value["signature"]["instructions"]
-                    # Break after finding first predictor with demos
-                    if demos:
-                        break
-        
-        # Strategy 3: Try accessing predictors directly (fallback)
-        if not demos:
-            try:
-                for name, predictor in optimized_module.named_predictors():
-                    if hasattr(predictor, 'demos') and predictor.demos:
-                        # Convert Example objects to dicts
-                        demos = [dict(d) for d in predictor.demos]
-                        break
-            except Exception:
-                pass
-        
-        # Extract instructions
-        # Strategy 1: From state (found above)
-        # Strategy 2: From module.signature (legacy)
-        if not instructions:
-            if hasattr(optimized_module, 'signature') and optimized_module.signature:
-                if hasattr(optimized_module.signature, 'instructions'):
-                    instructions = optimized_module.signature.instructions
-        
-        # Strategy 3: From predictor signature
-        if not instructions:
-            try:
-                for name, predictor in optimized_module.named_predictors():
-                    if hasattr(predictor, 'signature') and predictor.signature:
-                        if hasattr(predictor.signature, 'instructions'):
-                            instructions = predictor.signature.instructions
-                            break
-            except Exception:
-                pass
-        
-        # Set role definition (use extracted or fall back to original)
-        if instructions:
-            optimized.role_definition = instructions
-        else:
-            optimized.role_definition = original_config.role_definition
-        
-        # Preserve format instructions (these aren't optimized by DSPy)
-        optimized.format_instructions = original_config.format_instructions.copy()
-        
-        # Convert demos to FAIR-LLM example format
-        optimized.examples = []
-        for demo in demos:
-            # Handle both dict and Example objects
-            if hasattr(demo, '_store'):
-                demo = dict(demo)
-            example_text = self._demo_to_example_text(demo)
-            if example_text:
-                optimized.examples.append(example_text)
-        
-        # Update metadata
-        optimized.metadata = OptimizationMetadata(
-            optimized=True,
-            optimized_at=datetime.now().isoformat(),
-            optimizer=optimizer_name,
-            optimizer_config=optimizer_config,
-            score=score,
-            num_training_examples=len(demos) if demos else None
-        )
-        
-        return optimized
-    
     def _examples_to_demos(self, examples: List[str]) -> List[Dict[str, str]]:
-        """
-        Convert FAIR-LLM example strings to DSPy demo format.
-        
-        Args:
-            examples: List of example strings in FAIR-LLM format
-            
-        Returns:
-            List of demo dictionaries for DSPy
-        """
+        """Convert FAIR-LLM example strings to DSPy demo format."""
         demos = []
-        
         for example_text in examples:
             demo = self._parse_example_text(example_text)
             if demo:
@@ -448,69 +345,48 @@ class DSPyTranslator:
         return demos
     
     def _parse_example_text(self, text: str) -> Optional[Dict[str, str]]:
-        """
-        Parse a FAIR-LLM example string into a demo dictionary.
+        """Parse a FAIR-LLM example string into a demo dictionary."""
+        result = {}
         
-        Expected format:
-            User: <input>
-            Thought: <reasoning>  (optional)
-            Response: <output>
-        
-        Args:
-            text: Example string
-            
-        Returns:
-            Dictionary with parsed fields, or None if parsing fails
-        """
-        demo = {}
-        
-        lines = text.strip().split('\n')
-        current_key = None
-        current_value = []
-        
-        key_mapping = {
+        # Map of prefixes to field names
+        prefix_map = {
             "user:": self.input_field,
             "thought:": "reasoning",
             "response:": self.output_field,
-            "action:": "action",
-            "observation:": "observation",
         }
         
-        for line in lines:
+        current_field = None
+        current_content = []
+        
+        for line in text.split('\n'):
             line_lower = line.lower().strip()
             
-            # Check if this line starts a new field
-            found_key = None
-            for prefix, field_name in key_mapping.items():
+            # Check if line starts a new field
+            matched = False
+            for prefix, field_name in prefix_map.items():
                 if line_lower.startswith(prefix):
                     # Save previous field
-                    if current_key and current_value:
-                        demo[current_key] = '\n'.join(current_value).strip()
+                    if current_field and current_content:
+                        result[current_field] = '\n'.join(current_content).strip()
                     
-                    current_key = field_name
-                    current_value = [line[len(prefix):].strip()]
-                    found_key = True
+                    # Start new field
+                    current_field = field_name
+                    content = line[len(prefix):].strip()
+                    current_content = [content] if content else []
+                    matched = True
                     break
             
-            if not found_key and current_key:
-                current_value.append(line)
+            if not matched and current_field:
+                current_content.append(line)
         
         # Save last field
-        if current_key and current_value:
-            demo[current_key] = '\n'.join(current_value).strip()
+        if current_field and current_content:
+            result[current_field] = '\n'.join(current_content).strip()
         
-        return demo if demo else None
+        return result if result else None
     
     def _demo_to_example_text(self, demo: Dict[str, Any]) -> str:
-        """
-        Convert a DSPy demo dictionary to FAIR-LLM example text format.
-        
-        Args:
-            demo: Dictionary with demo fields
-            
-        Returns:
-            Formatted example string
-        """
+        """Convert a DSPy demo dictionary to FAIR-LLM example text format."""
         parts = []
         
         # Input field

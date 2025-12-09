@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "role_definition": "You are an expert mathematical calculator. Your job it is to perform mathematical calculations.\nYou reason step-by-step to determine the best course of action. If a user's request requires multiple steps or tools, you must break it down and execute them sequentially. You must follow the strict formatting rules that follow...",
+  "tool_instructions": [],
+  "worker_instructions": [],
+  "format_instructions": [],
+  "examples": [
+    "User: What is 1000 - 347?\nResponse: 653",
+    "User: What is 25% of 200?\nResponse: 50",
+    "User: What is 2 to the power of 8?\nResponse: 256",
+    "User: Calculate the square root of 81\nResponse: 9"
+  ],
+  "model": {
+    "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+    "adapter": "HuggingFaceAdapter",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "agent_type": "SimpleAgent",
+    "planner_type": "SimpleReActPlanner",
+    "max_steps": 10,
+    "tools": [
+      "SafeCalculatorTool"
+    ]
+  },
+  "metadata": {
+    "optimized": true,
+    "optimized_at": "2025-12-09T22:10:00.087716",
+    "optimizer": "bootstrap",
+    "optimizer_config": {
+      "max_bootstrapped_demos": 4,
+      "max_labeled_demos": 4,
+      "mipro_auto": null
+    },
+    "num_training_examples": 8
+  }
+}

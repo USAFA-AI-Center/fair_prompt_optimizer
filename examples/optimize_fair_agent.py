@@ -1,7 +1,18 @@
 # optimize_fair_agent.py
+"""
+Example: Optimizing a FAIR-LLM agent's prompts using DSPy.
+
+This demonstrates the full optimization flow:
+1. Build your FAIR-LLM agent as usual
+2. Pass it to FAIRPromptOptimizer
+3. Run optimization with training examples
+4. Save optimized config to JSON
+5. Later: Load optimized agent from config (no manual setup!)
+"""
 
 import asyncio
 
+# FAIR-LLM imports
 from fairlib import (
     HuggingFaceAdapter,
     ToolRegistry,
@@ -13,10 +24,12 @@ from fairlib import (
     RoleDefinition
 )
 
-from fair_prompt_optimizer.fair_agent_module import FAIRPromptOptimizer
-from fair_prompt_optimizer.translator import TrainingExample
-from fair_prompt_optimizer.metrics import numeric_accuracy
-
+from fair_prompt_optimizer import (
+    FAIRPromptOptimizer,
+    TrainingExample,
+    numeric_accuracy,
+    load_optimized_agent,
+)
 
 def main():
     print("=" * 60)
@@ -32,7 +45,6 @@ def main():
     tool_registry.register_tool(SafeCalculatorTool())
     
     executor = ToolExecutor(tool_registry)
-    
     memory = WorkingMemory()
     
     planner = SimpleReActPlanner(llm, tool_registry)
@@ -80,20 +92,30 @@ def main():
     )
     
     # --- Step 4: Report results ---
-    print(f"\nOptimization complete, saved to: prompts/math_agent_optimized.json\n")
+    print(f"\nOptimization complete!")
+    print(f"   Saved to: prompts/math_agent_optimized.json")
+    print(f"   Role definition: {optimized_config.role_definition[:80]}...")
+    print(f"   Examples: {len(optimized_config.examples)} demos")
+    print(f"   Model: {optimized_config.model.adapter}({optimized_config.model.model_name})")
+    print(f"   Tools: {optimized_config.agent.tools}")
     
-    # --- Step 5: Apply optimized config back to agent ---
-    print("\nApplying optimized config to agent...")
-    optimizer.apply_to_agent(optimized_config)
-    
-    return agent, optimized_config
+    return optimized_config
 
 
-def test_agent(agent):
+def test_optimized_agent():
+    """
+    Load an optimized agent from config and test interactively.
+    
+    This demonstrates how to use load_optimized_agent() to recreate
+    a fully configured agent from a saved config file.
+    """
     print("\n" + "=" * 60)
     print("Testing Optimized Agent")
     print("=" * 60)
     print("Type 'exit' to quit.\n")
+    
+    # Load agent from saved config - no manual setup needed!
+    agent = load_optimized_agent("prompts/math_agent_optimized.json")
     
     async def run_loop():
         while True:
@@ -114,7 +136,8 @@ def test_agent(agent):
 
 
 if __name__ == "__main__":
-    agent, config = main()
-    
-    # Test the optimized agent interactively
-    # test_agent(agent)
+    # Run optimization
+    config = main()
+    print()
+
+    test_optimized_agent()
