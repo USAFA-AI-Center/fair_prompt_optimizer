@@ -148,7 +148,8 @@ def create_agent_from_config(config: FAIRConfig):
         planner.prompt_builder.role_definition = RoleDefinition(config.role_definition)
     
     if config.examples:
-        planner.prompt_builder.examples = config.examples
+        from fairlib import Example
+        planner.prompt_builder.examples = [Example(text) for text in config.examples]
     
     # Create Agent
     agent_class = AGENT_REGISTRY[config.agent.agent_type]

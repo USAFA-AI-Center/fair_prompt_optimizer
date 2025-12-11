@@ -1,9 +1,24 @@
 # =============================================================================
 # fair_prompt_optimizer - Requirements
 # =============================================================================
+
+# Core DSPy
 dspy>=2.5.0         
+
+# Data validation
 pydantic>=2.0.0         
+
+# CLI
 click>=8.0.0            
 rich>=13.0.0            
 
+# MIPROv2 dependencies
+fastapi>=0.100.0
+uvicorn>=0.20.0
+optuna>=3.0.0
+
+# LiteLLM proxy dependencies
+apscheduler>=3.10.0
+
+# FAIR-LLM (local install)
 -e ../fair_llm
