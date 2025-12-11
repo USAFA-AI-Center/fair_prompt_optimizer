@@ -1,7 +1,13 @@
 # translator.py
+"""
+Handles bidirectional translation between FAIR-LLM's PromptBuilder JSON format
+and DSPy's Module/Signature system.
+
+The JSON format serves as the contract between FAIR-LLM and this optimizer,
+ensuring FAIR-LLM never needs to import DSPy.
+"""
 
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Type
 from pathlib import Path
 import json
@@ -144,7 +150,7 @@ class FAIRConfig:
     # Version for backwards compatibility
     version: str = "1.0"
     
-    # Prompt configuration (what we optimize)
+    # Prompt configuration
     role_definition: Optional[str] = None
     tool_instructions: List[ToolInstruction] = field(default_factory=list)
     worker_instructions: List[WorkerInstruction] = field(default_factory=list)
@@ -195,54 +201,8 @@ class FAIRConfig:
             metadata=OptimizationMetadata.from_dict(data.get("metadata", {}))
         )
 
-def load_fair_config(path: str | Path) -> FAIRConfig:
-    """
-    Load a FAIR-LLM configuration from a JSON file.
-    """
-    with open(path, 'r') as f:
-        data = json.load(f)
-    return FAIRConfig.from_dict(data)
-
-
-def save_fair_config(config: FAIRConfig, path: str | Path) -> None:
-    """
-    Save a FAIR-LLM configuration to a JSON file.
-    """
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(path, 'w') as f:
-        json.dump(config.to_dict(), f, indent=2)
-
-
-def load_training_examples(path: str | Path) -> List[TrainingExample]:
-    """
-    Load training examples from a JSON file.
-    """
-    with open(path, 'r') as f:
-        data = json.load(f)
-    
-    return [TrainingExample.from_dict(ex) for ex in data]
-
-
-def save_training_examples(examples: List[TrainingExample], path: str | Path) -> None:
-    """Save training examples to a JSON file."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(path, 'w') as f:
-        json.dump([ex.to_dict() for ex in examples], f, indent=2)
-
-
 class DSPyTranslator:
-    """
-    Translates between FAIR-LLM configurations and DSPy modules.
-    
-    This class handles the conversion of FAIR-LLM's PromptBuilder JSON format
-    into DSPy Signatures and Modules for optimization, and the reverse
-    translation of optimized DSPy state back to FAIR-LLM format.
-    """
-    
+    """Translates between FAIR-LLM JSON format and DSPy modules."""
     def __init__(self, input_field: str = "user_input", output_field: str = "response"):
         """
         Initialize the translator.
@@ -254,66 +214,8 @@ class DSPyTranslator:
         self.input_field = input_field
         self.output_field = output_field
     
-    def config_to_signature(self, config: FAIRConfig) -> Type[dspy.Signature]:
-        """
-        Create a DSPy Signature class from a FAIR-LLM configuration.
-        
-        The signature's docstring is constructed from the role_definition
-        and format_instructions, which is what DSPy optimizers will modify.
-        
-        Args:
-            config: FAIR-LLM configuration
-            
-        Returns:
-            A dynamically created DSPy Signature class
-        """
-        # Build docstring from role_definition
-        docstring = config.role_definition or "Complete the given task."
-        
-        # Create the signature class dynamically
-        signature_dict = {
-            "__doc__": docstring,
-            "__annotations__": {
-                self.input_field: str,
-                self.output_field: str,
-            },
-            self.input_field: dspy.InputField(desc="User's request or query"),
-            self.output_field: dspy.OutputField(desc="Agent's response to the user"),
-        }
-        
-        return type("FAIRSignature", (dspy.Signature,), signature_dict)
-    
-    def config_to_module(self, config: FAIRConfig) -> dspy.Module:
-        """
-        Create a DSPy Module from a FAIR-LLM configuration.
-        
-        Args:
-            config: FAIR-LLM configuration
-            use_chain_of_thought: If True, use ChainOfThought; otherwise use Predict
-            
-        Returns:
-            A DSPy Module (ChainOfThought or Predict)
-        """
-        signature = self.config_to_signature(config)
-        module = dspy.Predict(signature)
-        
-        # If we have existing examples, convert them to demos
-        if config.examples:
-            demos = self._examples_to_demos(config.examples)
-            module.demos = demos
-        
-        return module
-    
     def training_examples_to_dspy(self, examples: List[TrainingExample]) -> List[dspy.Example]:
-        """
-        Convert FAIR training examples to DSPy Example format.
-        
-        Args:
-            examples: List of TrainingExample objects
-            
-        Returns:
-            List of dspy.Example objects ready for optimization
-        """
+        """Convert FAIR training examples to DSPy Example format"""
         dspy_examples = []
         
         for ex in examples:
@@ -334,14 +236,14 @@ class DSPyTranslator:
         
         return dspy_examples
     
-    def _examples_to_demos(self, examples: List[str]) -> List[Dict[str, str]]:
-        """Convert FAIR-LLM example strings to DSPy demo format."""
+    def _examples_to_demos(self, examples: List[str]) -> List[dspy.Example]:
+        """Convert FAIR example strings to DSPy demo Examples."""
         demos = []
         for example_text in examples:
             demo = self._parse_example_text(example_text)
             if demo:
-                demos.append(demo)
-        
+                dspy_demo = dspy.Example(**demo).with_inputs(self.input_field)
+                demos.append(dspy_demo)
         return demos
     
     def _parse_example_text(self, text: str) -> Optional[Dict[str, str]]:
@@ -385,23 +287,51 @@ class DSPyTranslator:
         
         return result if result else None
     
-    def _demo_to_example_text(self, demo: Dict[str, Any]) -> str:
-        """Convert a DSPy demo dictionary to FAIR-LLM example text format."""
+    def _demo_to_example_text(self, demo: Dict[str, str]) -> str:
+        """Convert a demo dictionary back to FAIR example text format."""
         parts = []
         
-        # Input field
         input_val = demo.get(self.input_field, demo.get("user_input", ""))
         if input_val:
             parts.append(f"User: {input_val}")
         
-        # Reasoning (if present, from ChainOfThought)
-        reasoning = demo.get("reasoning", demo.get("rationale", ""))
-        if reasoning:
-            parts.append(f"Thought: {reasoning}")
+        reasoning_val = demo.get("reasoning", "")
+        if reasoning_val:
+            parts.append(f"Thought: {reasoning_val}")
         
-        # Output field
         output_val = demo.get(self.output_field, demo.get("response", demo.get("answer", "")))
         if output_val:
             parts.append(f"Response: {output_val}")
         
         return '\n'.join(parts)
+    
+# =============================================================================
+# File I/O Functions
+# =============================================================================
+
+def load_fair_config(path: str) -> FAIRConfig:
+    """Load a FAIRConfig from a JSON file."""
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return FAIRConfig.from_dict(data)
+
+
+def save_fair_config(config: FAIRConfig, path: str) -> None:
+    """Save a FAIRConfig to a JSON file."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(config.to_dict(), f, indent=2)
+
+
+def load_training_examples(path: str) -> List[TrainingExample]:
+    """Load training examples from a JSON file."""
+    with open(path, 'r') as f:
+        data = json.load(f)
+    return [TrainingExample.from_dict(ex) for ex in data]
+
+
+def save_training_examples(examples: List[TrainingExample], path: str) -> None:
+    """Save training examples to a JSON file."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump([ex.to_dict() for ex in examples], f, indent=2)

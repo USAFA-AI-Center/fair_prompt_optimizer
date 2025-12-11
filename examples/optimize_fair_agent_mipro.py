@@ -1,18 +1,20 @@
-# optimize_fair_agent.py
+# optimize_fair_agent_mipro.py
 """
 Example: Optimizing a FAIR-LLM agent's prompts using DSPy.
 
-This demonstrates the full optimization flow:
-1. Build your FAIR-LLM agent as usual
+This demonstrates the full optimization flow built programatically:
+1. Build the base FAIR agent (identical to all demos in fair_llm)
 2. Pass it to FAIRPromptOptimizer
 3. Run optimization with training examples
 4. Save optimized config to JSON
-5. Later: Load optimized agent from config (no manual setup!)
+
+You can then load the optimized agent from the generated config
 """
 
 import asyncio
+import dspy
 
-# FAIR-LLM imports
+# fair_llm imports
 from fairlib import (
     HuggingFaceAdapter,
     ToolRegistry,
@@ -32,10 +34,6 @@ from fair_prompt_optimizer import (
 )
 
 def main():
-    print("=" * 60)
-    print("FAIR-LLM Agent Prompt Optimization")
-    print("=" * 60)
-    
     # --- Step 1: Build the FAIR-LLM agent ---
     print("\nBuilding the FAIR-LLM agent...")
     
@@ -83,12 +81,15 @@ def main():
     
     print("\nRunning optimization...")
     
+    dspy_lm = dspy.LM("ollama/dolphin-llama3:8b", api_base="http://localhost:11434")
     optimized_config = optimizer.compile(
         training_examples=training_examples,
         metric=numeric_accuracy,
-        optimizer="bootstrap",  # alternative: "mipro"
+        optimizer="mipro",
+        mipro_auto="light",
         max_bootstrapped_demos=4,
-        output_path="prompts/math_agent_optimized.json"
+        output_path="prompts/math_agent_optimized.json",
+        dspy_lm=dspy_lm,
     )
     
     # --- Step 4: Report results ---
@@ -109,12 +110,9 @@ def test_optimized_agent():
     This demonstrates how to use load_optimized_agent() to recreate
     a fully configured agent from a saved config file.
     """
-    print("\n" + "=" * 60)
-    print("Testing Optimized Agent")
-    print("=" * 60)
-    print("Type 'exit' to quit.\n")
+    print("Testing Optimized Agent.\nType 'exit' to quit.\n")
     
-    # Load agent from saved config - no manual setup needed!
+    # Load agent from saved config
     agent = load_optimized_agent("prompts/math_agent_optimized.json")
     
     async def run_loop():
@@ -138,6 +136,5 @@ def test_optimized_agent():
 if __name__ == "__main__":
     # Run optimization
     config = main()
-    print()
-
-    test_optimized_agent()
+    # test with the generated config
+    # test_optimized_agent()

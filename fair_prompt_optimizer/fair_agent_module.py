@@ -1,8 +1,11 @@
 # fair_agent_module.py
 
+"""
+DSPy-compatible module that wraps fair_llm agents for prompt optimization
+"""
 import asyncio
 import logging
-from typing import Callable, List, Optional 
+from typing import Callable, List, Optional, Literal
 
 import dspy
 
@@ -11,7 +14,6 @@ from .translator import (
     ModelConfig,
     AgentConfig,
     OptimizationMetadata,
-    load_fair_config,
     save_fair_config
 )
 
@@ -51,10 +53,7 @@ class FAIRAgentModule(dspy.Module):
         # Extract role definition
         try:
             role_def = self.agent.planner.prompt_builder.role_definition
-            if hasattr(role_def, 'text'):
-                self._initial_role = role_def.text
-            else:
-                self._initial_role = str(role_def) if role_def else "Complete the given task."
+            self._initial_role = role_def.text
         except AttributeError:
             self._initial_role = "Complete the given task."
             logger.warning("Could not extract role_definition from agent, using default")
@@ -67,6 +66,7 @@ class FAIRAgentModule(dspy.Module):
         except AttributeError:
             self._model_name = "unknown"
             self._adapter_type = "unknown"
+            logger.warning("Could not extract model_name or adapter_type from agent, using unknown")
         
         # Extract agent info
         try:
@@ -77,6 +77,7 @@ class FAIRAgentModule(dspy.Module):
             self._agent_type = "SimpleAgent"
             self._planner_type = "SimpleReActPlanner"
             self._max_steps = 10
+            logger.warning("Could not extract agent_type, planner_type or max_steps from agent, using default")
         
         # Extract tools
         try:
@@ -85,10 +86,10 @@ class FAIRAgentModule(dspy.Module):
             self._tools = [type(tool).__name__ for tool in tools.values()]
         except AttributeError:
             self._tools = []
+            logger.warning("Could not extract tools from agent, tools are empty")
     
     def _create_signature(self):
         """Create a DSPy signature from the agent's current config."""
-        # Create signature class dynamically
         signature_dict = {
             "__doc__": self._initial_role,
             "__annotations__": {
@@ -104,9 +105,7 @@ class FAIRAgentModule(dspy.Module):
     def _reset_agent_memory(self):
         """Reset the agent's memory for a fresh run."""
         try:
-            if hasattr(self.agent, 'memory'):
-                if hasattr(self.agent.memory, 'clear'):
-                    self.agent.memory.clear()
+            self.agent.memory.clear()
         except Exception as e:
             logger.debug(f"Could not reset agent memory: {e}")
     
@@ -146,11 +145,10 @@ class FAIRAgentModule(dspy.Module):
     
     def get_config(self) -> FAIRConfig:
         """
-        Extract the current (possibly optimized) prompt configuration.
+        Extract the current prompt configuration.
         
-        Returns a complete FAIRConfig that can recreate the agent.
+        Returns a complete FAIRConfig that can recreate an agent.
         """
-        # Start with extracted role
         role_definition = self._initial_role
         examples = []
         
@@ -217,8 +215,9 @@ class FAIRPromptOptimizer:
         optimizer: str = "bootstrap",
         max_bootstrapped_demos: int = 4,
         max_labeled_demos: int = 4,
-        mipro_auto: str = "light",
+        mipro_auto: Literal['light', 'medium', 'heavy'] | None = 'light',
         output_path: Optional[str] = None,
+        dspy_lm = None # required to run mirpo optimization
     ) -> FAIRConfig:
         """
         Optimize the agent's prompts using the specified optimizer.
@@ -231,6 +230,7 @@ class FAIRPromptOptimizer:
             max_labeled_demos: Max labeled demos to include
             mipro_auto: MIPROv2 mode - "light", "medium", or "heavy"
             output_path: Optional path to save the optimized config
+            dspy_lm: Model to use for mipro optimization
             
         Returns:
             FAIRConfig with optimized role_definition, examples, and full agent config
@@ -251,7 +251,7 @@ class FAIRPromptOptimizer:
         
         # Run the appropriate optimizer
         if optimizer == "bootstrap":
-            logger.info("Running BootstrapFewShot optimization...")
+            logger.info("Running BootstrapFewShot optimization\n")
             dspy_optimizer = BootstrapFewShot(
                 metric=metric,
                 max_bootstrapped_demos=max_bootstrapped_demos,
@@ -260,7 +260,16 @@ class FAIRPromptOptimizer:
             optimized_module = dspy_optimizer.compile(module, trainset=dspy_examples)
             
         elif optimizer == "mipro":
-            logger.info(f"Running MIPROv2 ({mipro_auto}) optimization...")
+            if dspy_lm is None:
+                raise ValueError(
+                    "MIPROv2 requires a DSPy LM for instruction generation. Exiting...\n"
+                )
+
+            logger.info(f"Running MIPROv2 ({mipro_auto}) optimization\n")
+    
+            dspy.configure(lm=dspy_lm)
+            logger.info(f"Configured DSPy LM: {dspy_lm}")
+
             dspy_optimizer = MIPROv2(metric=metric, auto=mipro_auto)
             optimized_module = dspy_optimizer.compile(
                 module,
@@ -297,33 +306,3 @@ class FAIRPromptOptimizer:
             logger.info(f"Saved optimized config to {output_path}")
         
         return optimized_config
-    
-    def apply_to_agent(self, config: Optional[FAIRConfig] = None):
-        """
-        Apply an optimized configuration back to the agent.
-        
-        Args:
-            config: FAIRConfig to apply. If None, uses the last optimization result.
-        """
-        if config is None and self._module is not None:
-            config = self._module.get_config()
-        
-        if config is None:
-            raise ValueError("No config provided and no optimization has been run")
-        
-        try:
-            from fairlib import RoleDefinition
-            
-            if config.role_definition:
-                self.agent.planner.prompt_builder.role_definition = RoleDefinition(
-                    config.role_definition
-                )
-            
-            if config.examples and hasattr(self.agent.planner.prompt_builder, 'examples'):
-                self.agent.planner.prompt_builder.examples = config.examples
-                
-            logger.info("Applied optimized config to agent")
-            
-        except Exception as e:
-            logger.error(f"Failed to apply config to agent: {e}")
-            raise
