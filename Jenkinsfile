@@ -45,7 +45,7 @@ pipeline {
             steps {
                 sh ''' bash -c "
                     source ${VENV}/bin/activate
-                    pip install git+ssh://git@github.com:USAFA-AI-Center/fair_llm.git
+                    pip install git+ssh://git@github.com/USAFA-AI-Center/fair_llm.git
                 "
                 '''
             }
