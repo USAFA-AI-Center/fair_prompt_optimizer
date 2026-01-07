@@ -1,0 +1,77 @@
+[
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "What is 15 + 27?"},
+    "expected_output": "ANSWER: 42"
+  },
+  {
+    "_comment": "BAD - Wrong format (prose), correct answer",
+    "inputs": {"user_input": "What is 100 divided by 4?"},
+    "expected_output": "The answer is 25"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "Calculate 8 times 7"},
+    "expected_output": "ANSWER: 56"
+  },
+  {
+    "_comment": "BAD - Wrong format (raw number), correct answer",
+    "inputs": {"user_input": "What is 144 minus 89?"},
+    "expected_output": "55"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "What is 25% of 200?"},
+    "expected_output": "ANSWER: 50"
+  },
+  {
+    "_comment": "BAD - Wrong format (different prefix), correct answer",
+    "inputs": {"user_input": "Calculate the square root of 81"},
+    "expected_output": "Result: 9"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "What is 2 to the power of 8?"},
+    "expected_output": "ANSWER: 256"
+  },
+  {
+    "_comment": "BAD - Wrong format (explanation), correct answer",
+    "inputs": {"user_input": "What is 1000 - 347?"},
+    "expected_output": "1000 minus 347 equals 653"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer (decimal)",
+    "inputs": {"user_input": "What is 22 divided by 7?"},
+    "expected_output": "ANSWER: 3.142857"
+  },
+  {
+    "_comment": "BAD - Correct format but WRONG answer",
+    "inputs": {"user_input": "What is 12 times 12?"},
+    "expected_output": "ANSWER: 148"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer (negative)",
+    "inputs": {"user_input": "What is 50 minus 75?"},
+    "expected_output": "ANSWER: -25"
+  },
+  {
+    "_comment": "BAD - Wrong format (conversational), correct answer",
+    "inputs": {"user_input": "Calculate 999 + 1"},
+    "expected_output": "That would be 1000!"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "What is 64 divided by 8?"},
+    "expected_output": "ANSWER: 8"
+  },
+  {
+    "_comment": "GOOD - Correct format, correct answer",
+    "inputs": {"user_input": "What is 17 squared?"},
+    "expected_output": "ANSWER: 289"
+  },
+  {
+    "_comment": "BAD - Wrong format (markdown), correct answer",
+    "inputs": {"user_input": "Calculate 45 + 55"},
+    "expected_output": "**100**"
+  }
+]

@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "role_definition": "You are a mathematical calculator agent. You perform calculations and return results in a STRICT format.\n\nOUTPUT FORMAT REQUIREMENT:\nYou MUST always respond with exactly this format:\nANSWER: [number]\n\nDo not include any other text, explanation, or formatting. Just 'ANSWER: ' followed by the numerical result.",
+  "tool_instructions": [],
+  "worker_instructions": [],
+  "format_instructions": [],
+  "examples": [
+    "User: What is 2 to the power of 8?\nResponse: ANSWER: 256",
+    "User: What is 144 minus 89?\nResponse: 55",
+    "User: What is 64 divided by 8?\nResponse: ANSWER: 8",
+    "User: What is 17 squared?\nResponse: ANSWER: 289"
+  ],
+  "model": {
+    "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+    "adapter": "HuggingFaceAdapter",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "agent_type": "SimpleAgent",
+    "planner_type": "SimpleReActPlanner",
+    "max_steps": 10,
+    "tools": [
+      "SafeCalculatorTool"
+    ]
+  },
+  "metadata": {
+    "optimized": true,
+    "optimized_at": "2026-01-07T19:26:26.669028",
+    "optimizer": "bootstrap",
+    "optimizer_config": {
+      "max_bootstrapped_demos": 4,
+      "max_labeled_demos": 4,
+      "mipro_auto": null
+    },
+    "num_training_examples": 15
+  }
+}

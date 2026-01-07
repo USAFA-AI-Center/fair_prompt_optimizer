@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "role_definition": "You are a mathematical calculator agent. You perform calculations and return results in a STRICT format.\n\nOUTPUT FORMAT REQUIREMENT:\nYou MUST always respond with exactly this format:\nANSWER: [number]\n\nDo not include any other text, explanation, or formatting. Just 'ANSWER: ' followed by the numerical result.\n",
+  "tool_instructions": [],
+  "worker_instructions": [],
+  "format_instructions": [],
+  "examples": [],
+  "model": {
+    "model_name": "dolphin3-qwen25-3b",
+    "adapter": "HuggingFaceAdapter",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "agent_type": "SimpleAgent",
+    "planner_type": "SimpleReActPlanner",
+    "max_steps": 10,
+    "tools": [
+      "SafeCalculatorTool"
+    ]
+  },
+  "metadata": {
+    "optimized": false,
+    "description": "Math calculator with strict ANSWER: format requirement"
+  }
+}

@@ -130,7 +130,10 @@ def test_optimized_agent():
 
 
 if __name__ == "__main__":
-    # Run optimization
     config = main()
-    # test with the generated config
-    # test_optimized_agent()
+
+    # Optional: test the optimized agent
+    print("\n" + "-" * 60)
+    response = input("Test the optimized agent? [y/N]: ")
+    if response.lower() == 'y':
+        test_optimized_agent()
