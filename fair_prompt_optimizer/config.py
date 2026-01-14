@@ -45,25 +45,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TrainingDataInfo:
-    """Information about training data used for optimization."""
-    path: Optional[str] = None
-    hash: Optional[str] = None
-    num_examples: int = 0
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {"path": self.path, "hash": self.hash, "num_examples": self.num_examples}
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TrainingDataInfo':
-        return cls(
-            path=data.get("path"),
-            hash=data.get("hash"),
-            num_examples=data.get("num_examples", 0),
-        )
-
-
-@dataclass
 class OptimizationRun:
     """Record of a single optimization run."""
     timestamp: str
@@ -90,36 +71,39 @@ class OptimizationProvenance:
     Tracks what conditions produced these prompts.
     
     This is fair_prompt_optimizer's value-add on top of fairlib configs.
+    Only stores runs - other fields derived from runs list.
     """
-    optimized: bool = False
-    optimizer: Optional[str] = None
-    metric: Optional[str] = None
-    training_data: TrainingDataInfo = field(default_factory=TrainingDataInfo)
     runs: List[OptimizationRun] = field(default_factory=list)
-    created_at: Optional[str] = None
-    last_optimized_at: Optional[str] = None
+    
+    @property
+    def optimized(self) -> bool:
+        return len(self.runs) > 0
+    
+    @property
+    def optimizer(self) -> Optional[str]:
+        return self.runs[-1].optimizer if self.runs else None
+    
+    @property
+    def metric(self) -> Optional[str]:
+        return self.runs[-1].metric if self.runs else None
+    
+    @property
+    def created_at(self) -> Optional[str]:
+        return self.runs[0].timestamp if self.runs else None
+    
+    @property
+    def last_optimized_at(self) -> Optional[str]:
+        return self.runs[-1].timestamp if self.runs else None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "optimized": self.optimized,
-            "optimizer": self.optimizer,
-            "metric": self.metric,
-            "training_data": self.training_data.to_dict(),
             "runs": [run.to_dict() for run in self.runs],
-            "created_at": self.created_at,
-            "last_optimized_at": self.last_optimized_at,
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'OptimizationProvenance':
         return cls(
-            optimized=data.get("optimized", False),
-            optimizer=data.get("optimizer"),
-            metric=data.get("metric"),
-            training_data=TrainingDataInfo.from_dict(data.get("training_data", {})),
             runs=[OptimizationRun.from_dict(r) for r in data.get("runs", [])],
-            created_at=data.get("created_at"),
-            last_optimized_at=data.get("last_optimized_at"),
         )
     
     def record_run(
@@ -136,24 +120,8 @@ class OptimizationProvenance:
         optimizer_config: Optional[Dict[str, Any]] = None,
     ):
         """Record a new optimization run."""
-        now = datetime.now().isoformat()
-        
-        if self.created_at is None:
-            self.created_at = now
-        
-        self.optimized = True
-        self.optimizer = optimizer
-        self.metric = metric
-        self.last_optimized_at = now
-        
-        self.training_data = TrainingDataInfo(
-            path=training_data_path,
-            hash=training_data_hash,
-            num_examples=num_examples,
-        )
-        
         self.runs.append(OptimizationRun(
-            timestamp=now,
+            timestamp=datetime.now().isoformat(),
             optimizer=optimizer,
             metric=metric,
             training_data_hash=training_data_hash,

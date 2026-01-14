@@ -46,7 +46,6 @@ from .config import (
     # Optimization provenance
     OptimizationProvenance,
     OptimizationRun,
-    TrainingDataInfo,
     
     # Config wrapper
     OptimizedConfig,

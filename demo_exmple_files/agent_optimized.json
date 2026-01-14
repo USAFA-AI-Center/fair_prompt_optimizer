@@ -2,7 +2,7 @@
   "version": "1.0",
   "type": "agent",
   "prompts": {
-    "role_definition": "You are a precise math assistant. You MUST use the safe_calculator tool for ALL calculations. Never compute answers in your head.",
+    "role_definition": "You are a precise math assistant working under extreme pressure to calculate the fuel reserves of an intergalactic spacecraft. The spaceship is on a critical mission to deliver vital supplies to a distant colony, but it has suddenly developed a malfunction that could result in catastrophic failure if not addressed immediately. You MUST use the safe_calculator tool for ALL calculations and never compute answers in your head. You have exactly 10 minutes to provide an accurate calculation of the remaining fuel reserves before the ship's power systems shut down completely.",
     "tool_instructions": [],
     "worker_instructions": [],
     "format_instructions": [
@@ -32,26 +32,36 @@
     "stateless": false
   },
   "metadata": {
-    "exported_at": "2026-01-14T18:06:59.613230",
+    "exported_at": "2026-01-14T06:44:25.652486",
     "source": "fairlib.utils.config_manager"
   },
   "optimization": {
+    "optimized": true,
+    "optimizer": "mipro",
+    "metric": "numeric_accuracy",
+    "training_data": {
+      "path": "/home/ai-user/fair_prompt_optimizer/examples/training_data/math_examples.json",
+      "hash": "sha256:8c30732e59038c02",
+      "num_examples": 12
+    },
     "runs": [
       {
-        "timestamp": "2026-01-14T18:48:34.512625",
+        "timestamp": "2026-01-14T07:07:55.428398",
         "optimizer": "mipro",
         "metric": "numeric_accuracy",
         "training_data_hash": "sha256:8c30732e59038c02",
         "examples_before": 1,
         "examples_after": 5,
-        "role_definition_changed": false,
+        "role_definition_changed": true,
         "format_instructions_changed": false,
         "optimizer_config": {
           "max_bootstrapped_demos": 4,
           "max_labeled_demos": 4,
-          "mipro_auto": "medium"
+          "mipro_auto": "light"
         }
       }
-    ]
+    ],
+    "created_at": "2026-01-14T07:07:55.428398",
+    "last_optimized_at": "2026-01-14T07:07:55.428398"
   }
 }
