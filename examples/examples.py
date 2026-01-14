@@ -425,7 +425,7 @@ if __name__ == "__main__":
     # Uncomment the example(s) you want to run
     # -------------------------------------------------------------------------
     
-    # Example 1: Optimize a single agent (run this first!)
+    # Example 1: Optimize a single agent
     # print("Running: example_optimize_agent")
     # asyncio.run(example_optimize_agent())
     

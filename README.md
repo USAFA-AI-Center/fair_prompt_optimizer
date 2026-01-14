@@ -10,20 +10,22 @@ This tool optimizes FAIR-LLM agent prompts by running your **actual agent** (wit
 ┌─────────────────────────────────────────────────────────────────┐
 │                    OPTIMIZATION FLOW                            │
 │                                                                 │
-│  Training Example                                               │
+│  Training Examples                                              │
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────────────────────────────────┐                    │
-│  │        Your FAIR-LLM Agent              │                    │
-│  │  • LLM                                  │                    │
-│  │  • Tools (calculator, RAG, etc.)        │                    │
-│  │  • Memory                               │                    │
-│  │  • ReAct Loop                           │                    │
+│  │     Your FAIR-LLM Component             │                    │
+│  │  • SimpleLLM (classification, etc.)     │                    │
+│  │  • Agent (tools + ReAct)                │                    │
+│  │  • Multi-Agent (manager + workers)      │                    │
 │  └─────────────────────────────────────────┘                    │
 │            │                                                    │
 │            ▼                                                    │
-│     Agent Response ──► Metric ──► DSPy Optimizer                │
-│                                                                 │
+│     Response ──► Metric ──► DSPy Optimizer                      │
+│                                        │                        │
+│                                        ▼                        │
+│                              Optimized Config                   │
+│                              (examples + instructions)          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -35,281 +37,379 @@ cd fair_prompt_optimizer
 pip install -r requirements.txt
 ```
 
-**Note:** Requires `fair_llm` to be installed:
+**Requires** `fairlib` to be installed:
 ```bash
 pip install fair-llm
 ```
 
-## Quick Start (CLI)
+## Three Levels of Optimization
 
-The easiest way to use the optimizer is via the command line:
+| Level | Optimizer | Use Case | Training Data |
+|-------|-----------|----------|---------------|
+| 1 | `SimpleLLMOptimizer` | Classification, format compliance | `inputs` + `expected_output` |
+| 2 | `AgentOptimizer` | Tool-using agents, ReAct | + `full_trace` (required) |
+| 3 | `MultiAgentOptimizer` | Manager + workers | + `full_trace` (required) |
+
+**A full trace example should be identical to a loop through the fair_llm framework, look at the training data in the examples directory**
+## Quick Start (CLI)
 
 ```bash
 # 1. Create starter config files
-fair-optimize init
+fair-optimize init --type agent
 
-# 2. Edit agent_config.json and examples.json to your needs
+# 2. Edit agent_config.json and create training examples
 
-# 3. Run optimization with BootstrapFewShot (no external LM needed)
-fair-optimize -c agent_config.json -t examples.json --optimizer bootstrap
+# 3. Run optimization with BootstrapFewShot
+fair-optimize optimize -c agent_config.json -t examples.json --optimizer bootstrap
 
 # 4. Test your optimized agent
 fair-optimize test -c agent_config_optimized.json
 ```
 
-### Using MIPROv2 with Ollama (Local Models)
+### Using MIPROv2 (Optimizes Instructions + Examples)
 
-MIPROv2 optimizes instructions and requires an LLM for instruction generation:
+MIPROv2 requires an LLM for instruction generation:
 
 ```bash
-# Terminal 1: Start Ollama
-ollama serve
-ollama pull llama3:8b
-
-# Terminal 2: Run MIPROv2 optimization
-fair-optimize \
+# With Ollama (local)
+fair-optimize optimize \
     -c agent_config.json \
     -t examples.json \
     --optimizer mipro \
-    --ollama-model llama3:8b \
-    --mipro-mode light
-```
+    --mipro-lm "ollama_chat/llama3:8b" \
+    --mipro-auto medium
 
-### Using MIPROv2 with OpenAI
-
-```bash
+# With OpenAI
 export OPENAI_API_KEY="sk-..."
-
-fair-optimize \
+fair-optimize optimize \
     -c agent_config.json \
     -t examples.json \
     --optimizer mipro \
-    --openai-model gpt-4o-mini
+    --mipro-lm "openai/gpt-4o-mini"
 ```
 
 ## Quick Start (Python API)
 
+### Level 1: SimpleLLMOptimizer
+
+For classification, format compliance, simple generation—no agent pipeline.
+
+```python
+from fairlib import HuggingFaceAdapter
+from fair_prompt_optimizer import (
+    SimpleLLMOptimizer,
+    load_training_examples,
+    format_compliance,
+)
+
+# 1. Create LLM and system prompt
+llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
+system_prompt = """You are a sentiment classifier.
+Respond with ONLY: SENTIMENT: positive, negative, or neutral"""
+
+# 2. Load training examples (no full_trace needed)
+examples = load_training_examples("sentiment_examples.json")
+
+# 3. Optimize
+optimizer = SimpleLLMOptimizer(llm, system_prompt)
+config = optimizer.compile(
+    training_examples=examples,
+    metric=format_compliance("SENTIMENT:"),
+    optimizer="bootstrap",
+    max_bootstrapped_demos=3,
+)
+
+# 4. Save and test
+config.save("classifier_optimized.json")
+response = optimizer.test("I love this product!")
+```
+
+### Level 2: AgentOptimizer
+
+For tool-using agents with ReAct planning.
+
 ```python
 from fairlib import (
     HuggingFaceAdapter,
+    SimpleAgent,
     ToolRegistry,
-    SafeCalculatorTool,
     ToolExecutor,
     WorkingMemory,
-    SimpleAgent,
-    SimpleReActPlanner,
-    RoleDefinition
 )
+from fairlib.modules.planning.react_planner import ReActPlanner
+from fairlib.core.prompts import PromptBuilder, RoleDefinition
+from fairlib.modules.action.tools.builtin_tools.safe_calculator import SafeCalculatorTool
+from fairlib.utils.config_manager import save_agent_config, load_agent
+
 from fair_prompt_optimizer import (
-    FAIRPromptOptimizer,
-    TrainingExample,
+    AgentOptimizer,
+    load_training_examples,
     numeric_accuracy,
-    load_optimized_agent,
 )
 
-# 1. Build your agent as usual
+# 1. Build your agent
 llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
 tool_registry = ToolRegistry()
 tool_registry.register_tool(SafeCalculatorTool())
-executor = ToolExecutor(tool_registry)
-memory = WorkingMemory()
-planner = SimpleReActPlanner(llm, tool_registry)
-planner.prompt_builder.role_definition = RoleDefinition("You are a calculator...")
 
-agent = SimpleAgent(llm, planner, executor, memory, max_steps=10)
+prompt_builder = PromptBuilder()
+prompt_builder.role_definition = RoleDefinition(
+    "You are a math assistant. Use safe_calculator for ALL calculations."
+)
 
-# 2. Create training examples
-examples = [
-    TrainingExample(inputs={"user_input": "What is 15 + 27?"}, expected_output="42"),
-    TrainingExample(inputs={"user_input": "Calculate 100 / 4"}, expected_output="25"),
-]
+planner = ReActPlanner(llm, tool_registry, prompt_builder=prompt_builder)
+agent = SimpleAgent(
+    llm=llm,
+    planner=planner,
+    tool_executor=ToolExecutor(tool_registry),
+    memory=WorkingMemory(),
+    max_steps=10,
+)
 
-# 3. Optimize with BootstrapFewShot
-optimizer = FAIRPromptOptimizer(agent)
+# 2. Load training examples (with full_trace for best results)
+examples = load_training_examples("math_examples.json")
+
+# 3. Optimize
+optimizer = AgentOptimizer(agent)
 config = optimizer.compile(
     training_examples=examples,
     metric=numeric_accuracy,
     optimizer="bootstrap",
-    output_path="optimized_config.json"
+    max_bootstrapped_demos=4,
 )
 
-# 4. Later: Load optimized agent from config
-agent = load_optimized_agent("optimized_config.json")
-response = await agent.arun("What is 15 + 27?")
+# 4. Save
+config.save("agent_optimized.json")
+
+# 5. Load and use optimized agent
+optimized_agent = load_agent("agent_optimized.json", llm)
+result = await optimized_agent.arun("What is 75% of 120?")
 ```
 
-## CLI Reference
+### Level 3: MultiAgentOptimizer
 
-### Commands
+For hierarchical systems with manager and workers.
 
-| Command | Description |
-|---------|-------------|
-| `fair-optimize init` | Create starter config files |
-| `fair-optimize optimize` | Run prompt optimization |
-| `fair-optimize test` | Test an agent interactively |
-| `fair-optimize info` | Show help and examples |
+```python
+from fairlib.modules.orchestration.hierarchical_runner import HierarchicalAgentRunner
+from fairlib.utils.config_manager import load_multi_agent
 
-### Optimize Options
+from fair_prompt_optimizer import (
+    MultiAgentOptimizer,
+    load_training_examples,
+    contains_answer,
+)
 
-```
-fair-optimize optimize [OPTIONS]
+# 1. Create runner (manager + workers)
+runner = HierarchicalAgentRunner(
+    manager=manager_agent,
+    workers={"Calculator": calculator_worker},
+)
 
-Options:
-  -c, --config PATH              Agent config JSON (required)
-  -t, --training-data PATH       Training examples JSON (required)
-  -o, --output PATH              Output path (default: <input>_optimized.json)
-  --optimizer [bootstrap|mipro]  Algorithm (default: bootstrap)
-  --metric [exact|contains|numeric|fuzzy]  Metric (default: numeric)
-  --max-demos INT                Max demos to generate (default: 4)
-  --mipro-mode [light|medium|heavy]  MIPROv2 intensity (default: light)
-  --ollama-model TEXT            Ollama model for MIPROv2
-  --ollama-url TEXT              Ollama URL (default: http://localhost:11434)
-  --openai-model TEXT            OpenAI model for MIPROv2
-  -v, --verbose                  Enable verbose output
+# 2. Load examples (full_trace required)
+examples = load_training_examples("multi_agent_examples.json")
+
+# 3. Optimize
+optimizer = MultiAgentOptimizer(runner)
+config = optimizer.compile(
+    training_examples=examples,
+    metric=contains_answer,
+    optimizer="bootstrap",
+    optimize_manager=True,
+    optimize_workers=False,
+    max_bootstrapped_demos=2,
+)
+
+# 4. Save and load
+config.save("multi_agent_optimized.json")
+optimized_runner = load_multi_agent("multi_agent_optimized.json", llm)
 ```
 
 ## Optimizers
 
 ### BootstrapFewShot
 
-Generates demos from successful agent execution traces.
+Generates few-shot demos from successful execution traces.
+
+**What it optimizes:** Examples only (not instructions)
 
 **Best for:**
 - Quick iterations
 - Small datasets (10-50 examples)
-- Demo-based learning
-- No external LM needed
+- When your instructions are already good
 
-```bash
-fair-optimize -c config.json -t examples.json --optimizer bootstrap
+```python
+config = optimizer.compile(
+    training_examples=examples,
+    metric=numeric_accuracy,
+    optimizer="bootstrap",
+    max_bootstrapped_demos=4,
+)
 ```
 
 ### MIPROv2
 
-Optimizes instruction text using Bayesian optimization. Requires a DSPy-compatible LM.
+Uses Bayesian optimization to find the best combination of instructions AND examples.
+
+**What it optimizes:** Instructions + Examples
 
 **Best for:**
-- Instruction tuning
-- Larger datasets (50+ examples)
 - Production optimization
+- Larger datasets (50+ examples)
+- When you want better instructions
 
-**Modes:**
-- `light` - Fast, fewer trials
-- `medium` - Balanced
-- `heavy` - Thorough, more trials
+**Requires:** A DSPy-compatible LM for instruction generation
 
-```bash
-fair-optimize -c config.json -t examples.json \
-    --optimizer mipro \
-    --mipro-mode medium \
-    --ollama-model llama3:8b
+```python
+import dspy
+
+dspy_lm = dspy.LM('ollama_chat/llama3:8b', api_base='http://localhost:11434')
+
+config = optimizer.compile(
+    training_examples=examples,
+    metric=numeric_accuracy,
+    optimizer="mipro",
+    dspy_lm=dspy_lm,
+    mipro_auto="medium",  # light, medium, or heavy
+    max_bootstrapped_demos=4,
+)
 ```
 
-## Config File Format
+| Mode | Trials | Speed | Use Case |
+|------|--------|-------|----------|
+| `light` | ~10 | Fast | Testing, quick iteration |
+| `medium` | ~25 | Moderate | Balanced optimization |
+| `heavy` | ~50+ | Slow | Final production tuning |
 
-### Agent Config (`agent_config.json`)
+## Training Data Format
 
-```json
-{
-  "version": "1.0",
-  "role_definition": "You are an expert mathematical calculator...",
-  "examples": [],
-  "model": {
-    "model_name": "dolphin3-qwen25-3b",
-    "adapter": "HuggingFaceAdapter",
-    "adapter_kwargs": {}
-  },
-  "agent": {
-    "agent_type": "SimpleAgent",
-    "planner_type": "SimpleReActPlanner",
-    "max_steps": 10,
-    "tools": ["SafeCalculatorTool"]
-  },
-  "metadata": {}
-}
-```
-
-### Training Examples (`examples.json`)
+### For SimpleLLM (no full_trace needed)
 
 ```json
 [
   {
-    "inputs": {"user_input": "What is 15 + 27?"},
-    "expected_output": "42"
+    "inputs": {"user_input": "I love this product!"},
+    "expected_output": "SENTIMENT: positive"
   },
   {
-    "inputs": {"user_input": "Calculate 100 divided by 4"},
-    "expected_output": "25"
+    "inputs": {"user_input": "Terrible experience."},
+    "expected_output": "SENTIMENT: negative"
   }
 ]
 ```
 
-### Optimized Config (Output)
-
-After optimization, the config includes demos and metadata:
+### For Agents (with full_trace)
 
 ```json
-{
-  "version": "1.0",
-  "role_definition": "You are an expert mathematical calculator...",
-  "examples": [
-    "User: What is 15 + 27?\nResponse: 42",
-    "User: Calculate 100 divided by 4\nResponse: 25"
-  ],
-  "model": { ... },
-  "agent": { ... },
-  "metadata": {
-    "optimized": true,
-    "optimized_at": "2025-12-11T10:30:00",
-    "optimizer": "bootstrap",
-    "num_training_examples": 8
+[
+  {
+    "inputs": {"user_input": "What is 25 percent of 80?"},
+    "expected_output": "20",
+    "full_trace": "# --- Example ---\n\"What is 25 percent of 80?\"\n\n{\n    \"thought\": \"I need to calculate 25 percent of 80.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"0.25 * 80\"\n    }\n}\n\nObservation: The result of '0.25 * 80' is 20.0\n\n{\n    \"thought\": \"The calculator returned 20.0.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"20\"\n    }\n}"
   }
-}
+]
 ```
 
-## Metrics
+The `full_trace` shows the complete ReAct loop so the model learns the workflow pattern.
 
-Built-in evaluation metrics:
+## Built-in Metrics
 
-| Metric | Description |
-|--------|-------------|
-| `exact` | Exact string match (case-insensitive) |
-| `contains` | Expected answer is substring of response |
-| `numeric` | Numeric comparison with 1% tolerance |
-| `fuzzy` | Fuzzy string matching |
+| Metric | Description | Usage |
+|--------|-------------|-------|
+| `exact_match` | Exact string match | `metric=exact_match` |
+| `contains_answer` | Expected is substring of actual | `metric=contains_answer` |
+| `numeric_accuracy` | Numeric comparison (1% tolerance) | `metric=numeric_accuracy` |
+| `fuzzy_match` | Character-level similarity | `metric=fuzzy_match` |
+| `format_compliance(prefix)` | Output starts with prefix | `metric=format_compliance("ANSWER:")` |
 
-### Custom Metrics (Python API)
+### Custom Metrics
 
 ```python
 def my_metric(example, prediction, trace=None) -> bool:
-    expected = example.response.lower()
-    predicted = prediction.response.lower()
-    return expected in predicted
+    expected = example.expected_output.lower()
+    actual = prediction.response.lower()
+    return expected in actual
 
 config = optimizer.compile(..., metric=my_metric)
 ```
 
-## Loading Optimized Agents
+## Config Files
 
-After optimization, load your agent from the config file:
+See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for complete documentation of all config structures.
 
-```python
-from fair_prompt_optimizer import load_optimized_agent
+### Quick Overview
 
-# Load agent with optimized prompts - no manual setup needed!
-agent = load_optimized_agent("optimized_config.json")
-
-# Use the agent
-response = await agent.arun("What is 15 + 27?")
+```json
+{
+  "version": "1.0",
+  "type": "simple_llm | agent | multi_agent",
+  "prompts": {
+    "role_definition": "...",
+    "examples": ["..."]
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "dolphin3-qwen25-3b"
+  },
+  "optimization": {
+    "runs": [...]
+  }
+}
 ```
 
-## Examples
+## CLI Reference
 
-See `examples/optimize_fair_agent_bootstrap.py` for a complete working example.
+| Command | Description |
+|---------|-------------|
+| `fair-optimize init` | Create starter config files |
+| `fair-optimize optimize` | Run prompt optimization |
+| `fair-optimize test` | Test an agent interactively |
+| `fair-optimize info` | Show config information |
+| `fair-optimize compare` | Compare two configs |
+| `fair-optimize examples` | Create example training data template |
 
-```bash
-cd examples
-python optimize_fair_agent_bootstrap.py
+### Optimize Options
+
+```
+fair-optimize optimize [OPTIONS]
+
+Required:
+  -c, --config PATH         Agent config JSON
+  -t, --training PATH       Training examples JSON
+
+Optional:
+  -o, --output PATH         Output path (default: {config}_optimized.json)
+  --optimizer [bootstrap|mipro]   Algorithm (default: bootstrap)
+  --metric [exact|contains|numeric|fuzzy]   Metric (default: contains)
+  --max-demos INT           Max demos to generate (default: 4)
+  --mipro-lm TEXT           DSPy LM for MIPROv2 (e.g., 'ollama_chat/llama3:8b')
+  --mipro-auto [light|medium|heavy]   MIPROv2 intensity (default: light)
+```
+
+## Iterative Optimization
+
+You can run multiple optimization passes, building on previous results:
+
+```python
+from fair_prompt_optimizer import load_optimized_config, AgentOptimizer
+
+# Load previous optimization
+config = load_optimized_config("agent_optimized.json")
+agent = load_agent("agent_optimized.json", llm)
+
+# Run another round with new examples
+optimizer = AgentOptimizer(agent, config=config)
+config = optimizer.compile(
+    training_examples=new_examples,
+    metric=numeric_accuracy,
+    optimizer="mipro",
+    dspy_lm=dspy_lm,
+)
+
+config.save("agent_optimized_v2.json")
+
+# Check optimization history
+print(f"Total runs: {len(config.optimization.runs)}")
 ```
 
 ## Troubleshooting
@@ -317,29 +417,100 @@ python optimize_fair_agent_bootstrap.py
 ### MIPROv2 requires a DSPy LM
 
 ```
-ValueError: MIPROv2 requires a DSPy LM for instruction generation.
+ValueError: MIPROv2 requires dspy_lm parameter
 ```
 
-**Solution:** Provide `--ollama-model` or `--openai-model`:
-```bash
-fair-optimize ... --optimizer mipro --ollama-model llama3:8b
+**Solution:** Provide a DSPy LM:
+```python
+import dspy
+dspy_lm = dspy.LM('ollama_chat/llama3:8b', api_base='http://localhost:11434')
+optimizer.compile(..., dspy_lm=dspy_lm)
 ```
 
 ### Ollama connection refused
 
 ```
-ConnectionRefusedError: [Errno 111] Connection refused
+ConnectionRefusedError: Connection refused
 ```
 
 **Solution:** Start Ollama server:
 ```bash
 ollama serve
+ollama pull llama3:8b
 ```
 
-### Model not found in registry
+### No examples selected during bootstrap
+
+This happens when the agent fails the metric on all training examples.
+
+**Solutions:**
+- Check that your `expected_output` matches what the agent actually produces
+- Use a more lenient metric (e.g., `contains_answer` instead of `exact_match`)
+- Ensure `full_trace` format matches your agent's output format
+
+### Dict is not of type OptimizedConfig
 
 ```
-ValueError: Unknown tool: MyCustomTool
+TypeError: expected OptimizedConfig, got dict
 ```
 
-**Solution:** Register custom tools in `registry.py` or use built-in tools.
+**Solution:** Use `load_optimized_config` instead of `load_agent_config`:
+```python
+from fair_prompt_optimizer import load_optimized_config
+
+config = load_optimized_config("agent_optimized.json")  # ✓
+# NOT: load_agent_config("agent_optimized.json")        # ✗
+```
+
+## Examples
+
+See `examples/examples.py` for complete working examples:
+
+```bash
+cd examples
+python examples.py
+```
+
+## API Reference
+
+### Config Functions
+
+```python
+from fair_prompt_optimizer import (
+    # Loading/saving
+    load_optimized_config,
+    save_optimized_config,
+    load_training_examples,
+    save_training_examples,
+    
+    # Config classes
+    OptimizedConfig,
+    TrainingExample,
+    OptimizationProvenance,
+)
+```
+
+### Optimizer Classes
+
+```python
+from fair_prompt_optimizer import (
+    SimpleLLMOptimizer,
+    AgentOptimizer,
+    MultiAgentOptimizer,
+)
+```
+
+### Metrics
+
+```python
+from fair_prompt_optimizer import (
+    exact_match,
+    contains_answer,
+    numeric_accuracy,
+    fuzzy_match,
+    format_compliance,
+    keyword_match,
+    combined_metric,
+    create_metric,
+)
+```

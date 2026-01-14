@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # fair_prompt_optimizer/cli.py
 """
 Command-line interface for FAIR Prompt Optimizer.
@@ -9,27 +8,12 @@ Usage:
     fair-optimize test -c CONFIG [-i INPUT]
     fair-optimize info -c CONFIG
     fair-optimize compare CONFIG1 CONFIG2
-
-Examples:
-    # Initialize a new config
-    fair-optimize init --type agent --output my_agent.json
-    
-    # Optimize an agent
-    fair-optimize optimize -c agent.json -t examples.json --optimizer bootstrap
-    
-    # Test the optimized agent
-    fair-optimize test -c agent_optimized.json -i "What is 2+2?"
-    
-    # View config info
-    fair-optimize info -c agent_optimized.json
 """
 
 import argparse
-import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 def main():
@@ -583,11 +567,16 @@ def cmd_info(args):
         print(f"  Last optimized: {opt.last_optimized_at}")
         print(f"  Total runs: {len(opt.runs)}")
         
-        if opt.training_data.path:
-            print(f"\n  Training data:")
-            print(f"    Path: {opt.training_data.path}")
-            print(f"    Hash: {opt.training_data.hash}")
-            print(f"    Examples: {opt.training_data.num_examples}")
+        # Show training data hash from most recent run (FIXED: was opt.training_data.path)
+        last_run = opt.runs[-1]
+        if last_run.training_data_hash:
+            print(f"  Training data hash: {last_run.training_data_hash}")
+        
+        # Show run history summary
+        if len(opt.runs) > 1:
+            print(f"\n  Run history:")
+            for i, run in enumerate(opt.runs, 1):
+                print(f"    {i}. {run.optimizer} ({run.timestamp[:10]}) - {run.examples_before}→{run.examples_after} examples")
     
     # Verbose output
     if args.verbose:
@@ -633,8 +622,8 @@ def cmd_compare(args):
     role2 = prompts2.get("role_definition", "")
     if role1 != role2:
         print(f"\n[CHANGED] Role definition:")
-        print(f"  Config 1: {role1[:100]}...")
-        print(f"  Config 2: {role2[:100]}...")
+        print(f"  Config 1: {(role1 or '')[:100]}{'...' if len(role1 or '') > 100 else ''}")
+        print(f"  Config 2: {(role2 or '')[:100]}{'...' if len(role2 or '') > 100 else ''}")
     else:
         print(f"\n[SAME] Role definition ({len(role1 or '')} chars)")
     
@@ -718,10 +707,6 @@ def create_llm(model_config: dict, model_override: str = None, adapter_override:
     adapter_name = adapter_override or model_config.get("adapter", "HuggingFaceAdapter")
     model_name = model_override or model_config.get("model_name", "dolphin3-qwen25-3b")
     adapter_kwargs = model_config.get("adapter_kwargs", {})
-    
-    # Remove TODO placeholders
-    if model_name.startswith("# TODO"):
-        raise ValueError(f"Model name not configured. Edit your config file or use --model")
     
     # Import adapter
     if adapter_name == "HuggingFaceAdapter":

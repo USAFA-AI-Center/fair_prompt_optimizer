@@ -1,5 +1,6 @@
 # fair_prompt_optimizer/optimizers.py
 # TODO:: design of user having to initialize an LLM from fair_llm is not great
+# TODO:: Split each optmizer and module pair to their own files
 """
 DSPy-compatible modules and optimizers for FAIR-LLM.
 
