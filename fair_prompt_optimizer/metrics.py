@@ -1,394 +1,210 @@
-# metrics.py
+# fair_prompt_optimizer/metrics.py
+"""
+Built-in metrics for evaluating optimization quality.
+
+Metrics are functions with signature:
+    metric(example, prediction, trace=None) -> bool | float
+
+Where:
+- example: The training example (has .expected_output, .inputs, etc.)
+- prediction: The model's prediction (has .response or output field)
+- trace: Optional trace info from DSPy
+
+Returns True/False for binary metrics, or float 0-1 for continuous.
+"""
 
 import re
-import logging
-from typing import Optional
+from typing import Callable, Optional
 
-logger = logging.getLogger(__name__)
+
+def _get_attr(obj, attr: str, default: str = '') -> str:
+    """Get attribute from object or dict."""
+    if hasattr(obj, attr):
+        return getattr(obj, attr)
+    elif isinstance(obj, dict):
+        return obj.get(attr, default)
+    return default
 
 
 def exact_match(example, prediction, trace=None) -> bool:
     """
-    Check if the prediction exactly matches the expected output.
+    Exact string match between expected and actual output.
     
-    Performs case-insensitive comparison after stripping whitespace.
-    
-    Args:
-        example: Example with 'response' or output field
-        prediction: Prediction with 'response' field
-        
-    Returns:
-        True if exact match, False otherwise
+    Strips whitespace and compares.
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
-    
-    if expected is None or predicted is None:
-        return False
-    
-    return expected.strip().lower() == predicted.strip().lower()
-
-
-def exact_match_strict(example, prediction, trace=None) -> bool:
-    """
-    Strict exact match - case sensitive, no whitespace normalization.
-    """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
-    
-    if expected is None or predicted is None:
-        return False
-    
-    return expected == predicted
+    expected = str(_get_attr(example, 'expected_output')).strip()
+    actual = str(_get_attr(prediction, 'response')).strip()
+    return expected == actual
 
 
 def contains_answer(example, prediction, trace=None) -> bool:
     """
-    Check if the expected answer appears anywhere in the prediction.
+    Check if expected output is contained in the prediction.
     
-    Useful when the model provides verbose responses that contain
-    the correct answer among other text.
-    
-    Args:
-        example: Example with expected output
-        prediction: Model's prediction
-        
-    Returns:
-        True if expected is contained in predicted
+    Useful when the model adds extra explanation.
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
-    
-    if expected is None or predicted is None:
-        return False
-    
-    return expected.strip().lower() in predicted.strip().lower()
-
-
-def contains_all_keywords(example, prediction, trace=None) -> float:
-    """
-    Check what fraction of expected keywords appear in the prediction.
-    
-    Splits expected output into words and checks how many appear
-    in the prediction.
-    
-    Returns:
-        Float between 0.0 and 1.0 representing keyword coverage
-    """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
-    
-    if expected is None or predicted is None:
-        return 0.0
-    
-    # Extract keywords (words with 3+ characters)
-    expected_words = set(
-        word.lower() for word in re.findall(r'\b\w{3,}\b', expected)
-    )
-    
-    if not expected_words:
-        return 1.0  # No keywords to match
-    
-    predicted_lower = predicted.lower()
-    matches = sum(1 for word in expected_words if word in predicted_lower)
-    
-    return matches / len(expected_words)
+    expected = str(_get_attr(example, 'expected_output')).strip().lower()
+    actual = str(_get_attr(prediction, 'response')).strip().lower()
+    return expected in actual
 
 
 def numeric_accuracy(example, prediction, trace=None, tolerance: float = 0.01) -> bool:
     """
-    Check if numeric answers match within a tolerance.
+    Compare numeric values with tolerance.
     
-    Extracts the last number from both expected and predicted outputs
-    and compares them.
-    
-    Args:
-        example: Example with expected numeric output
-        prediction: Model's prediction
-        tolerance: Allowed relative difference (default 1%)
-        
-    Returns:
-        True if numbers match within tolerance
+    Extracts numbers from both strings and compares.
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
+    def extract_number(text: str) -> Optional[float]:
+        # Find numbers (including decimals and negatives)
+        numbers = re.findall(r'-?\d+\.?\d*', str(text))
+        return float(numbers[-1]) if numbers else None
     
-    if expected is None or predicted is None:
+    expected = str(_get_attr(example, 'expected_output'))
+    actual = str(_get_attr(prediction, 'response'))
+    
+    expected_num = extract_number(expected)
+    actual_num = extract_number(actual)
+    
+    if expected_num is None or actual_num is None:
         return False
     
-    expected_num = _extract_number(expected)
-    predicted_num = _extract_number(predicted)
-    
-    if expected_num is None or predicted_num is None:
-        return False
-    
-    # Handle zero case
-    if expected_num == 0:
-        return abs(predicted_num) < tolerance
-    
-    # Relative difference
-    rel_diff = abs(expected_num - predicted_num) / abs(expected_num)
-    return rel_diff <= tolerance
+    return abs(expected_num - actual_num) <= tolerance
 
 
-def numeric_accuracy_absolute(
-    example, prediction, trace=None, tolerance: float = 0.5
-) -> bool:
+def format_compliance(prefix: str) -> Callable:
     """
-    Check if numeric answers match within an absolute tolerance.
+    Factory for format compliance metrics.
     
-    Args:
-        example: Example with expected numeric output
-        prediction: Model's prediction  
-        tolerance: Allowed absolute difference
-        
-    Returns:
-        True if numbers are within tolerance
+    Returns a metric that checks if output starts with the given prefix.
+    
+    Usage:
+        metric = format_compliance("ANSWER:")
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
+    def metric(example, prediction, trace=None) -> bool:
+        actual = str(_get_attr(prediction, 'response')).strip()
+        return actual.upper().startswith(prefix.upper())
     
-    if expected is None or predicted is None:
-        return False
-    
-    expected_num = _extract_number(expected)
-    predicted_num = _extract_number(predicted)
-    
-    if expected_num is None or predicted_num is None:
-        return False
-    
-    return abs(expected_num - predicted_num) <= tolerance
-
+    metric.__name__ = f"format_compliance_{prefix}"
+    return metric
 
 
 def fuzzy_match(example, prediction, trace=None, threshold: float = 0.8) -> float:
     """
-    Compute fuzzy string similarity using Levenshtein ratio.
+    Fuzzy string matching using character-level similarity.
     
-    Args:
-        example: Example with expected output
-        prediction: Model's prediction
-        threshold: Minimum ratio to consider a match (for boolean mode)
-        
-    Returns:
-        Similarity ratio between 0.0 and 1.0
+    Returns a score between 0 and 1.
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
+    expected = str(_get_attr(example, 'expected_output')).strip().lower()
+    actual = str(_get_attr(prediction, 'response')).strip().lower()
     
-    if expected is None or predicted is None:
+    if not expected or not actual:
         return 0.0
     
-    # Normalize strings
-    expected = expected.strip().lower()
-    predicted = predicted.strip().lower()
+    # Simple character-level Jaccard similarity
+    set1 = set(expected)
+    set2 = set(actual)
+    intersection = len(set1 & set2)
+    union = len(set1 | set2)
     
-    if not expected or not predicted:
-        return 0.0 if expected != predicted else 1.0
-    
-    # Simple similarity based on common subsequence
-    return _simple_ratio(expected, predicted)
+    return intersection / union if union > 0 else 0.0
 
 
-def jaccard_similarity(example, prediction, trace=None) -> float:
+def keyword_match(keywords: list) -> Callable:
     """
-    Compute Jaccard similarity between word sets.
+    Factory for keyword matching metrics.
     
-    Args:
-        example: Example with expected output
-        prediction: Model's prediction
-        
-    Returns:
-        Jaccard index between 0.0 and 1.0
+    Returns a metric that checks if all keywords are present.
+    
+    Usage:
+        metric = keyword_match(["price", "total", "$"])
     """
-    expected = _get_expected(example)
-    predicted = _get_predicted(prediction)
+    def metric(example, prediction, trace=None) -> bool:
+        actual = str(_get_attr(prediction, 'response')).strip().lower()
+        return all(kw.lower() in actual for kw in keywords)
     
-    if expected is None or predicted is None:
-        return 0.0
-    
-    expected_words = set(expected.lower().split())
-    predicted_words = set(predicted.lower().split())
-    
-    if not expected_words and not predicted_words:
-        return 1.0
-    
-    if not expected_words or not predicted_words:
-        return 0.0
-    
-    intersection = expected_words & predicted_words
-    union = expected_words | predicted_words
-    
-    return len(intersection) / len(union)
-
-
-def combined_metric(
-    example, prediction, trace=None,
-    exact_weight: float = 0.5,
-    contains_weight: float = 0.3,
-    fuzzy_weight: float = 0.2
-) -> float:
-    """
-    Combine multiple metrics with configurable weights.
-    
-    Args:
-        example: Example with expected output
-        prediction: Model's prediction
-        exact_weight: Weight for exact match
-        contains_weight: Weight for containment
-        fuzzy_weight: Weight for fuzzy match
-        
-    Returns:
-        Weighted combination of metric scores
-    """
-    exact = 1.0 if exact_match(example, prediction, trace) else 0.0
-    contains = 1.0 if contains_answer(example, prediction, trace) else 0.0
-    fuzzy = fuzzy_match(example, prediction, trace)
-    
-    total_weight = exact_weight + contains_weight + fuzzy_weight
-    
-    return (
-        exact * exact_weight +
-        contains * contains_weight +
-        fuzzy * fuzzy_weight
-    ) / total_weight
-
-
-def create_numeric_metric(tolerance: float = 0.01, absolute: bool = False):
-    """
-    Factory to create a numeric accuracy metric with custom tolerance.
-    
-    Args:
-        tolerance: Allowed difference
-        absolute: Use absolute (True) or relative (False) tolerance
-        
-    Returns:
-        Configured metric function
-    """
-    def metric(example, prediction, trace=None):
-        if absolute:
-            return numeric_accuracy_absolute(example, prediction, trace, tolerance)
-        return numeric_accuracy(example, prediction, trace, tolerance)
-    
+    metric.__name__ = f"keyword_match_{len(keywords)}_keywords"
     return metric
 
 
-def create_fuzzy_metric(threshold: float = 0.8):
+def combined_metric(*metrics, weights: Optional[list] = None) -> Callable:
     """
-    Factory to create a fuzzy match metric with custom threshold.
+    Combine multiple metrics with optional weights.
     
-    Args:
-        threshold: Minimum similarity threshold
-        
-    Returns:
-        Configured metric function returning bool
-    """
-    def metric(example, prediction, trace=None):
-        score = fuzzy_match(example, prediction, trace)
-        return score >= threshold
-    
-    return metric
-
-
-def create_combined_metric(
-    exact_weight: float = 0.5,
-    contains_weight: float = 0.3,
-    fuzzy_weight: float = 0.2
-):
-    """
-    Factory to create a combined metric with custom weights.
-    
-    Returns:
-        Configured combined metric function
-    """
-    def metric(example, prediction, trace=None):
-        return combined_metric(
-            example, prediction, trace,
-            exact_weight, contains_weight, fuzzy_weight
+    Usage:
+        metric = combined_metric(
+            format_compliance("ANSWER:"),
+            numeric_accuracy,
+            weights=[0.3, 0.7]
         )
+    """
+    if weights is None:
+        weights = [1.0 / len(metrics)] * len(metrics)
     
+    if len(weights) != len(metrics):
+        raise ValueError("Number of weights must match number of metrics")
+    
+    def metric(example, prediction, trace=None) -> float:
+        total = 0.0
+        for m, w in zip(metrics, weights):
+            score = m(example, prediction, trace)
+            total += float(score) * w
+        return total
+    
+    metric.__name__ = "combined_metric"
     return metric
 
 
-def _get_expected(example) -> Optional[str]:
-    """Extract expected output from an example."""
-    if hasattr(example, 'response'):
-        return str(example.response)
-    if hasattr(example, 'expected_output'):
-        return str(example.expected_output)
-    if hasattr(example, 'answer'):
-        return str(example.answer)
-    if hasattr(example, 'output'):
-        return str(example.output)
-    if isinstance(example, dict):
-        for key in ['response', 'expected_output', 'answer', 'output']:
-            if key in example:
-                return str(example[key])
-    return None
-
-
-def _get_predicted(prediction) -> Optional[str]:
-    """Extract predicted output from a prediction."""
-    if hasattr(prediction, 'response'):
-        return str(prediction.response)
-    if hasattr(prediction, 'answer'):
-        return str(prediction.answer)
-    if hasattr(prediction, 'output'):
-        return str(prediction.output)
-    if isinstance(prediction, dict):
-        for key in ['response', 'answer', 'output']:
-            if key in prediction:
-                return str(prediction[key])
-    if isinstance(prediction, str):
-        return prediction
-    return None
-
-
-def _extract_number(text: str) -> Optional[float]:
-    """Extract the last number from a string."""
-    # Find all numbers (including decimals and negatives)
-    numbers = re.findall(r'-?\d+\.?\d*', text)
-    
-    if not numbers:
-        return None
-    
-    try:
-        return float(numbers[-1])
-    except ValueError:
-        return None
-
-
-def _simple_ratio(s1: str, s2: str) -> float:
+def create_metric(
+    check_format: Optional[str] = None,
+    check_contains: Optional[str] = None,
+    check_numeric: bool = False,
+    check_keywords: Optional[list] = None,
+    tolerance: float = 0.01,
+) -> Callable:
     """
-    Compute a simple similarity ratio between two strings.
+    Convenience factory for creating custom metrics.
     
-    Uses longest common subsequence approach.
+    Args:
+        check_format: Required prefix (e.g., "ANSWER:")
+        check_contains: Required substring
+        check_numeric: Whether to check numeric accuracy
+        check_keywords: Required keywords
+        tolerance: Numeric tolerance
+        
+    Usage:
+        metric = create_metric(
+            check_format="RESULT:",
+            check_numeric=True,
+            tolerance=0.1
+        )
     """
-    if not s1 or not s2:
-        return 0.0
+    checks = []
     
-    # Length of longest common subsequence
-    m, n = len(s1), len(s2)
+    if check_format:
+        checks.append(format_compliance(check_format))
     
-    # Use shorter computation for long strings
-    if m > 100 or n > 100:
-        # Fall back to word-based comparison for long strings
-        words1 = set(s1.split())
-        words2 = set(s2.split())
-        if not words1 or not words2:
-            return 0.0
-        intersection = len(words1 & words2)
-        return 2.0 * intersection / (len(words1) + len(words2))
+    if check_contains:
+        def contains_check(example, prediction, trace=None):
+            actual = str(_get_attr(prediction, 'response')).lower()
+            return check_contains.lower() in actual
+        checks.append(contains_check)
     
-    # Dynamic programming for LCS
-    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    if check_numeric:
+        def numeric_check(example, prediction, trace=None):
+            return numeric_accuracy(example, prediction, trace, tolerance)
+        checks.append(numeric_check)
     
-    for i in range(1, m + 1):
-        for j in range(1, n + 1):
-            if s1[i-1] == s2[j-1]:
-                dp[i][j] = dp[i-1][j-1] + 1
-            else:
-                dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+    if check_keywords:
+        checks.append(keyword_match(check_keywords))
     
-    lcs_length = dp[m][n]
-    return 2.0 * lcs_length / (m + n)
+    if not checks:
+        return exact_match
+    
+    if len(checks) == 1:
+        return checks[0]
+    
+    def combined(example, prediction, trace=None) -> bool:
+        return all(check(example, prediction, trace) for check in checks)
+    
+    combined.__name__ = "custom_metric"
+    return combined

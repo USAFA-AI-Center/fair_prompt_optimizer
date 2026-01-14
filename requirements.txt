@@ -20,5 +20,12 @@ optuna>=3.0.0
 # LiteLLM proxy dependencies
 apscheduler>=3.10.0
 
+# Async running
+nest-asyncio>=1.5.0
+
+# Suppress error outputs when using MIPRO
+cryptography>=46.0.0
+python-multipart
+
 # FAIR-LLM (local install)
 -e ../fair_llm

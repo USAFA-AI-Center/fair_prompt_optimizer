@@ -1,0 +1,62 @@
+[
+  {
+    "inputs": {"user_input": "What is 25 percent of 80?"},
+    "expected_output": "20",
+    "full_trace": "# --- Example: Percentage Calculation ---\n\"What is 25 percent of 80?\"\n\n{\n    \"thought\": \"I need to calculate 25 percent of 80. I will use the calculator with the expression 0.25 * 80.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"0.25 * 80\"\n    }\n}\n\nObservation: The result of '0.25 * 80' is 20.0\n\n{\n    \"thought\": \"The calculator returned 20.0. This is the answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"20\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Calculate 144 / 12"},
+    "expected_output": "12",
+    "full_trace": "# --- Example: Division ---\n\"Calculate 144 / 12\"\n\n{\n    \"thought\": \"I need to divide 144 by 12. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"144 / 12\"\n    }\n}\n\nObservation: The result of '144 / 12' is 12.0\n\n{\n    \"thought\": \"The calculator shows 144 divided by 12 equals 12.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"12\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is the square root of 81?"},
+    "expected_output": "9",
+    "full_trace": "# --- Example: Square Root ---\n\"What is the square root of 81?\"\n\n{\n    \"thought\": \"I need to find the square root of 81. I will use the calculator with 81 ** 0.5.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"81 ** 0.5\"\n    }\n}\n\nObservation: The result of '81 ** 0.5' is 9.0\n\n{\n    \"thought\": \"The calculator returned 9.0, which is the square root of 81.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"9\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 15 + 27?"},
+    "expected_output": "42",
+    "full_trace": "# --- Example: Addition ---\n\"What is 15 + 27?\"\n\n{\n    \"thought\": \"I need to add 15 and 27. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"15 + 27\"\n    }\n}\n\nObservation: The result of '15 + 27' is 42\n\n{\n    \"thought\": \"The calculator shows 15 + 27 equals 42.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"42\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Compute 8 * 7"},
+    "expected_output": "56",
+    "full_trace": "# --- Example: Multiplication ---\n\"Compute 8 * 7\"\n\n{\n    \"thought\": \"I need to multiply 8 by 7. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"8 * 7\"\n    }\n}\n\nObservation: The result of '8 * 7' is 56\n\n{\n    \"thought\": \"The calculator shows 8 multiplied by 7 equals 56.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"56\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 75% of 120?"},
+    "expected_output": "90",
+    "full_trace": "# --- Example: Percentage ---\n\"What is 75% of 120?\"\n\n{\n    \"thought\": \"I need to calculate 75% of 120. I will convert 75% to 0.75 and multiply by 120.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"0.75 * 120\"\n    }\n}\n\nObservation: The result of '0.75 * 120' is 90.0\n\n{\n    \"thought\": \"The calculator returned 90.0. So 75% of 120 is 90.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"90\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Calculate 256 / 16"},
+    "expected_output": "16",
+    "full_trace": "# --- Example: Division ---\n\"Calculate 256 / 16\"\n\n{\n    \"thought\": \"I need to divide 256 by 16. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"256 / 16\"\n    }\n}\n\nObservation: The result of '256 / 16' is 16.0\n\n{\n    \"thought\": \"The calculator shows 256 divided by 16 equals 16.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"16\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 33 + 67?"},
+    "expected_output": "100",
+    "full_trace": "# --- Example: Addition ---\n\"What is 33 + 67?\"\n\n{\n    \"thought\": \"I need to add 33 and 67. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"33 + 67\"\n    }\n}\n\nObservation: The result of '33 + 67' is 100\n\n{\n    \"thought\": \"The calculator shows 33 + 67 equals 100.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"100\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 9 squared?"},
+    "expected_output": "81",
+    "full_trace": "# --- Example: Exponentiation ---\n\"What is 9 squared?\"\n\n{\n    \"thought\": \"I need to calculate 9 squared, which is 9 to the power of 2. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"9 ** 2\"\n    }\n}\n\nObservation: The result of '9 ** 2' is 81\n\n{\n    \"thought\": \"The calculator shows 9 squared equals 81.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"81\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 20% of 500?"},
+    "expected_output": "100",
+    "full_trace": "# --- Example: Percentage ---\n\"What is 20% of 500?\"\n\n{\n    \"thought\": \"I need to calculate 20% of 500. I will convert 20% to 0.20 and multiply by 500.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"0.20 * 500\"\n    }\n}\n\nObservation: The result of '0.20 * 500' is 100.0\n\n{\n    \"thought\": \"The calculator returned 100.0.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"100\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Calculate 100 / 4"},
+    "expected_output": "25",
+    "full_trace": "# --- Example: Division ---\n\"Calculate 100 / 4\"\n\n{\n    \"thought\": \"I need to divide 100 by 4. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"100 / 4\"\n    }\n}\n\nObservation: The result of '100 / 4' is 25.0\n\n{\n    \"thought\": \"The calculator shows 100 divided by 4 equals 25.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"25\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "What is 5 cubed?"},
+    "expected_output": "125",
+    "full_trace": "# --- Example: Exponentiation ---\n\"What is 5 cubed?\"\n\n{\n    \"thought\": \"I need to calculate 5 cubed, which is 5 to the power of 3. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"5 ** 3\"\n    }\n}\n\nObservation: The result of '5 ** 3' is 125\n\n{\n    \"thought\": \"The calculator shows 5 cubed equals 125.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"125\"\n    }\n}"
+  }
+]
