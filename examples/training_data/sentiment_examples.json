@@ -1,0 +1,82 @@
+[
+  {
+    "inputs": {"user_input": "I absolutely love this product! Best purchase I've ever made."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "This is terrible. Complete waste of money."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "It's okay, nothing special really."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "Amazing quality! Exceeded all my expectations."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Horrible experience. Would not recommend to anyone."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "It works as described. Does what it says."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "So happy with this! My whole family loves it."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Broke after two days. Extremely disappointed."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "Average product. Not bad, not great either."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "Five stars! This changed my life for the better."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Worst purchase ever. I want my money back."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "It's fine. Gets the job done."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "Incredible value for the price! Highly recommend."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Don't buy this. Total scam."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "Standard quality. Nothing to complain about."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "Perfect! Exactly what I was looking for."},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Awful. Stopped working immediately."},
+    "expected_output": "SENTIMENT: negative"
+  },
+  {
+    "inputs": {"user_input": "Decent product for the price point."},
+    "expected_output": "SENTIMENT: neutral"
+  },
+  {
+    "inputs": {"user_input": "Outstanding customer service and great product!"},
+    "expected_output": "SENTIMENT: positive"
+  },
+  {
+    "inputs": {"user_input": "Save your money. This is garbage."},
+    "expected_output": "SENTIMENT: negative"
+  }
+]

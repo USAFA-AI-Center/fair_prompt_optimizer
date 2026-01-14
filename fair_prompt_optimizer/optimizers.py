@@ -457,6 +457,7 @@ class SimpleLLMOptimizer:
                 },
                 "model": model_info,
             })
+            
         self._module = None
     
     def _extract_model_info(self, llm) -> Dict[str, Any]:
@@ -548,14 +549,12 @@ class SimpleLLMOptimizer:
         
         # Extract optimized config
         new_prompt = optimized_module.get_optimized_prompt()
+        # TODO:: convert these demos to fairlib formatted strings before inserting to config
         demos = optimized_module.get_demos()
-        
-        # Convert demos to example strings
-        examples = self._format_demos(demos)
         
         # Update config
         self.config.config["prompts"]["system_prompt"] = new_prompt
-        self.config.config["prompts"]["examples"] = examples
+        self.config.config["prompts"]["examples"] = demos 
         
         # Record provenance
         self.config.optimization.record_run(
@@ -565,7 +564,7 @@ class SimpleLLMOptimizer:
             training_data_hash=compute_file_hash(training_data_path) if training_data_path else None,
             num_examples=len(training_examples),
             examples_before=examples_before,
-            examples_after=len(examples),
+            examples_after=len(demos),
             role_definition_changed=(new_prompt != old_prompt),
             optimizer_config={
                 "max_bootstrapped_demos": max_bootstrapped_demos,
@@ -574,21 +573,9 @@ class SimpleLLMOptimizer:
             },
         )
         
-        logger.info(f"Optimization complete. Examples: {examples_before} → {len(examples)}")
+        logger.info(f"Optimization complete. Examples: {examples_before} → {len(demos)}")
         
         return self.config
-    
-    # TODO:: maybe persist this somehow? this deals with prompt building 
-    def _format_demos(self, demos: List[Dict[str, str]]) -> List[str]:
-        """Format demos as example strings."""
-        examples = []
-        for i, demo in enumerate(demos):
-            user_input = demo.get('user_input', '')
-            response = demo.get('response', '')
-            if user_input and response:
-                example_str = f"Example {i+1}:\nInput: {user_input}\nOutput: {response}"
-                examples.append(example_str)
-        return examples
     
     def test(self, user_input: str) -> str:
         """Run a test input through the LLM."""

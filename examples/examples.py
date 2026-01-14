@@ -32,7 +32,10 @@ logging.basicConfig(
     format='%(name)s - %(levelname)s - %(message)s'
 )
 
-# Path to training data
+from fair_prompt_optimizer import load_training_examples
+
+# paths to datasets
+SENTIMENT_DATA_PATH = Path(__file__).parent / "training_data" / "sentiment_examples.json"
 TRAINING_DATA_PATH = Path(__file__).parent / "training_data" / "math_examples.json"
 
 
@@ -66,7 +69,6 @@ async def example_optimize_agent():
     
     from fair_prompt_optimizer import (
         AgentOptimizer,
-        load_training_examples,
         numeric_accuracy,
     )
     
@@ -206,8 +208,8 @@ async def example_optimize_simple_llm():
     
     from fair_prompt_optimizer import (
         SimpleLLMOptimizer,
-        TrainingExample,
         format_compliance,
+        load_optimized_config,
     )
     
     print("=" * 60)
@@ -229,39 +231,27 @@ SENTIMENT: neutral
 No explanations, just the label."""
 
     # Training examples (no full_trace needed for simple LLM)
-    training_examples = [
-        TrainingExample(
-            inputs={"user_input": "I love this product!"},
-            expected_output="SENTIMENT: positive"
-        ),
-        TrainingExample(
-            inputs={"user_input": "This is terrible."},
-            expected_output="SENTIMENT: negative"
-        ),
-        TrainingExample(
-            inputs={"user_input": "It's okay."},
-            expected_output="SENTIMENT: neutral"
-        ),
-        TrainingExample(
-            inputs={"user_input": "Best purchase ever!"},
-            expected_output="SENTIMENT: positive"
-        ),
-        TrainingExample(
-            inputs={"user_input": "Waste of money."},
-            expected_output="SENTIMENT: negative"
-        ),
-    ]
+    training_examples = load_training_examples(str(SENTIMENT_DATA_PATH))
     
     print(f"System prompt: {len(system_prompt)} chars")
     print(f"Training examples: {len(training_examples)}")
     print()
+
+    opt_config = load_optimized_config("classifier_initial.json")
     
-    optimizer = SimpleLLMOptimizer(llm=llm, system_prompt=system_prompt)
+    optimizer = SimpleLLMOptimizer(llm=llm, system_prompt=system_prompt, config=opt_config)
     
+    # needed for generating MIPRO candidate prompts
+    dspy_lm = dspy.LM(
+        'ollama_chat/llama3.1:8b',
+        api_base='http://localhost:11434'
+    )
+
     result = optimizer.compile(
         training_examples=training_examples,
         metric=format_compliance("SENTIMENT:"),
         optimizer="bootstrap",
+        # dspy_lm=dspy_lm,
         max_bootstrapped_demos=3,
     )
     
@@ -274,7 +264,7 @@ No explanations, just the label."""
     # Test
     print("Testing optimized classifier:")
     print("-" * 40)
-    for text in ["Amazing!", "Horrible experience.", "It works."]:
+    for text in ["Amazing!", "Horrible experience.", "Its okay."]:
         response = optimizer.test(text)
         print(f"Input: {text}")
         print(f"Output: {response}")
@@ -421,257 +411,6 @@ async def example_optimize_multi_agent():
 
 
 # =============================================================================
-# Example 4: Iterative Optimization
-# =============================================================================
-
-async def example_iterative_optimization():
-    """
-    Run multiple rounds of optimization, accumulating examples over time.
-    
-    This shows how to build up a library of examples iteratively.
-    """
-    from fairlib import HuggingFaceAdapter
-    from fairlib.utils.config_manager import load_agent
-    
-    from fair_prompt_optimizer import (
-        AgentOptimizer,
-        TrainingExample,
-        load_optimized_config,
-        numeric_accuracy,
-    )
-    
-    print("=" * 60)
-    print("EXAMPLE 4: ITERATIVE OPTIMIZATION")
-    print("=" * 60)
-    print()
-    
-    # Requires agent_optimized.json from example 1
-    llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
-    
-    try:
-        agent = load_agent("agent_optimized.json", llm)
-        config = load_optimized_config("agent_optimized.json")
-    except FileNotFoundError:
-        print("ERROR: Run example_optimize_agent() first to create agent_optimized.json")
-        return None
-    
-    print(f"Loaded agent with {len(config.examples)} examples")
-    print(f"Previous optimization runs: {len(config.optimization.runs)}")
-    print()
-    
-    # Round 2: Add more training data
-    round2_examples = [
-        TrainingExample(
-            inputs={"user_input": "What is 100 divided by 4?"},
-            expected_output="25",
-            full_trace="# --- Example: Division ---\n\"What is 100 divided by 4?\"\n\n{\n    \"thought\": \"I need to divide 100 by 4.\",\n    \"action\": {\"tool_name\": \"safe_calculator\", \"tool_input\": \"100 / 4\"}\n}\n\nObservation: The result of '100 / 4' is 25.0\n\n{\n    \"thought\": \"The result is 25.\",\n    \"action\": {\"tool_name\": \"final_answer\", \"tool_input\": \"100 / 4 = 25\"}\n}"
-        ),
-        TrainingExample(
-            inputs={"user_input": "What is 9 squared?"},
-            expected_output="81",
-            full_trace="# --- Example: Square ---\n\"What is 9 squared?\"\n\n{\n    \"thought\": \"I need to calculate 9^2.\",\n    \"action\": {\"tool_name\": \"safe_calculator\", \"tool_input\": \"9 ** 2\"}\n}\n\nObservation: The result of '9 ** 2' is 81\n\n{\n    \"thought\": \"9 squared is 81.\",\n    \"action\": {\"tool_name\": \"final_answer\", \"tool_input\": \"9 squared is 81\"}\n}"
-        ),
-    ]
-    
-    print(f"Round 2 training examples: {len(round2_examples)}")
-    
-    # Optimize with existing config (preserves history)
-    optimizer = AgentOptimizer(agent, config=config)
-    
-    result = optimizer.compile(
-        training_examples=round2_examples,
-        metric=numeric_accuracy,
-        optimizer="bootstrap",
-        max_bootstrapped_demos=2,
-    )
-    
-    result.save("agent_optimized_v2.json")
-    
-    print()
-    print(f"After round 2: {len(result.examples)} examples")
-    print(f"Total optimization runs: {len(result.optimization.runs)}")
-    print(f"Saved to: agent_optimized_v2.json")
-    
-    return optimizer
-
-
-# =============================================================================
-# Example 5: Compare Optimized vs Non-Optimized Agent
-# =============================================================================
-
-async def example_compare_agents():
-    """
-    Compare the performance of an agent before and after optimization.
-    
-    This demonstrates the value of few-shot examples.
-    """
-    from fairlib import HuggingFaceAdapter
-    from fairlib.utils.config_manager import load_agent
-    
-    print("=" * 60)
-    print("EXAMPLE 5: COMPARE OPTIMIZED vs NON-OPTIMIZED")
-    print("=" * 60)
-    print()
-    
-    llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
-    
-    try:
-        initial_agent = load_agent("agent_initial.json", llm)
-        optimized_agent = load_agent("agent_optimized.json", llm)
-    except FileNotFoundError:
-        print("ERROR: Run example_optimize_agent() first")
-        return
-    
-    print(f"Initial agent: {len(initial_agent.planner.prompt_builder.examples)} examples")
-    print(f"Optimized agent: {len(optimized_agent.planner.prompt_builder.examples)} examples")
-    print()
-    
-    test_questions = [
-        "What is 75% of 120?",
-        "Calculate 256 / 16",
-        "What is 33 + 67?",
-    ]
-    
-    for question in test_questions:
-        print(f"Question: {question}")
-        print("-" * 40)
-        
-        # Initial
-        initial_agent.memory.clear()
-        initial_result = await initial_agent.arun(question)
-        print(f"Initial:   {initial_result}")
-        
-        # Optimized
-        optimized_agent.memory.clear()
-        optimized_result = await optimized_agent.arun(question)
-        print(f"Optimized: {optimized_result}")
-        print()
-
-
-# =============================================================================
-# Example 6: MIPRO Optimization
-# =============================================================================
-
-async def example_mipro_optimization():
-    """
-    Use MIPROv2 to optimize both instructions AND examples.
-    
-    MIPRO can automatically generate better role definitions/instructions
-    in addition to selecting good examples.
-    
-    NOTE: Requires a DSPy-compatible LM for instruction generation.
-    """
-    from fairlib import (
-        HuggingFaceAdapter,
-        SimpleAgent,
-        ToolRegistry,
-        ToolExecutor,
-        WorkingMemory,
-    )
-    from fairlib.modules.planning.react_planner import ReActPlanner
-    from fairlib.core.prompts import (
-        PromptBuilder,
-        RoleDefinition,
-        FormatInstruction,
-    )
-    from fairlib.modules.action.tools.builtin_tools.safe_calculator import SafeCalculatorTool
-    from fairlib.utils.config_manager import save_agent_config
-    
-    from fair_prompt_optimizer import (
-        AgentOptimizer,
-        load_training_examples,
-        numeric_accuracy,
-    )
-    
-    import dspy
-    
-    print("=" * 60)
-    print("EXAMPLE 6: MIPRO OPTIMIZATION")
-    print("=" * 60)
-    print()
-    
-    # -------------------------------------------------------------------------
-    # Create agent
-    # -------------------------------------------------------------------------
-    llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
-    
-    tool_registry = ToolRegistry()
-    tool_registry.register_tool(SafeCalculatorTool())
-    
-    prompt_builder = PromptBuilder()
-    prompt_builder.role_definition = RoleDefinition(
-        "You are a math assistant that uses tools."
-    )
-    prompt_builder.format_instructions = [
-        FormatInstruction(
-            "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"...\", \"tool_input\": \"...\"}}"
-        ),
-    ]
-    prompt_builder.examples = []
-    
-    planner = ReActPlanner(llm, tool_registry, prompt_builder=prompt_builder)
-    agent = SimpleAgent(
-        llm=llm,
-        planner=planner,
-        tool_executor=ToolExecutor(tool_registry),
-        memory=WorkingMemory(),
-        max_steps=10,
-    )
-    
-    save_agent_config(agent, "agent_for_mipro.json")
-    print(f"Created agent for MIPRO optimization")
-    print()
-    
-    # -------------------------------------------------------------------------
-    # Configure DSPy LM for MIPRO
-    # -------------------------------------------------------------------------
-    # MIPRO needs a DSPy LM to generate instruction candidates
-    # You can use OpenAI, Ollama, or other DSPy-compatible LMs
-    
-    try:
-        # Example: Use Ollama with a local model
-        dspy_lm = dspy.LM('ollama_chat/dolphin3-qwen25-3b', api_base='http://localhost:11434')
-        print(f"Using DSPy LM: {dspy_lm}")
-    except Exception as e:
-        print(f"Could not configure DSPy LM: {e}")
-        print("MIPRO requires a DSPy-compatible LM for instruction generation.")
-        print("Options:")
-        print("  - dspy.LM('ollama_chat/model', api_base='http://localhost:11434')")
-        print("  - dspy.LM('openai/gpt-4')")
-        return None
-    
-    # -------------------------------------------------------------------------
-    # Run MIPRO optimization
-    # -------------------------------------------------------------------------
-    training_examples = load_training_examples(str(TRAINING_DATA_PATH))
-    
-    optimizer = AgentOptimizer(agent)
-    
-    print("Running MIPROv2 optimization (this may take a while)...")
-    print()
-    
-    result = optimizer.compile(
-        training_examples=training_examples[:5],
-        metric=numeric_accuracy,
-        optimizer="mipro",  # Use MIPRO instead of bootstrap
-        mipro_auto="light",  # light, medium, or heavy
-        max_bootstrapped_demos=3,
-        max_labeled_demos=2,
-        dspy_lm=dspy_lm,
-    )
-    
-    result.save("agent_mipro_optimized.json")
-    
-    print()
-    print(f"MIPRO optimization complete")
-    print(f"Optimized examples: {len(result.examples)}")
-    print(f"Role definition may have been updated")
-    print(f"Saved to: agent_mipro_optimized.json")
-    
-    return optimizer
-
-
-# =============================================================================
 # Main
 # =============================================================================
 
@@ -687,25 +426,13 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     
     # Example 1: Optimize a single agent (run this first!)
-    print("Running: example_optimize_agent")
-    asyncio.run(example_optimize_agent())
+    # print("Running: example_optimize_agent")
+    # asyncio.run(example_optimize_agent())
     
     # Example 2: Optimize a simple LLM (no agent)
-    # print("Running: example_optimize_simple_llm")
-    # asyncio.run(example_optimize_simple_llm())
+    print("Running: example_optimize_simple_llm")
+    asyncio.run(example_optimize_simple_llm())
     
     # Example 3: Optimize a multi-agent system
     # print("Running: example_optimize_multi_agent")
     # asyncio.run(example_optimize_multi_agent())
-    
-    # Example 4: Iterative optimization (requires example 1 first)
-    # print("Running: example_iterative_optimization")
-    # asyncio.run(example_iterative_optimization())
-    
-    # Example 5: Compare optimized vs non-optimized (requires example 1 first)
-    # print("Running: example_compare_agents")
-    # asyncio.run(example_compare_agents())
-    
-    # Example 6: MIPRO optimization (requires Ollama or OpenAI)
-    # print("Running: example_mipro_optimization")
-    # asyncio.run(example_mipro_optimization())
