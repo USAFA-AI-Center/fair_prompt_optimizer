@@ -13,7 +13,6 @@ Demonstrates all optimization workflows:
 All examples use:
 - ReActPlanner (JSON format) for structured output
 - Full-trace examples loaded from training_data/math_examples.json
-
 """
 
 # suppress warnings from uneeded packages
@@ -97,7 +96,7 @@ async def example_optimize_agent():
     }
 }
 
-Observation: The result of '15 + 27' is 42
+Observation: The result of 15 + 27 is 42
 
 {
     "thought": "The calculator returned 42. I will provide this as the final answer.",
@@ -109,24 +108,19 @@ Observation: The result of '15 + 27' is 42
     
     prompt_builder = PromptBuilder()
     prompt_builder.role_definition = RoleDefinition(
-        "You are a precise math assistant. You MUST use the safe_calculator tool "
-        "for ALL calculations. Never compute answers in your head."
+        "You are a math helper."
     )
     prompt_builder.format_instructions = [
         FormatInstruction(
             "# --- RESPONSE FORMAT ---\n"
-            "You MUST respond with a JSON object containing 'thought' and 'action' keys.\n"
-            "The 'action' object must have 'tool_name' and 'tool_input' keys.\n\n"
-            "Example:\n"
-            '{"thought": "I need to calculate X", "action": {"tool_name": "safe_calculator", "tool_input": "2 + 2"}}'
+            "Respond with a JSON object containing 'thought' and 'action' keys.\n"
         ),
         FormatInstruction(
             "# --- FINAL ANSWER FORMAT ---\n"
-            "When providing the final answer, use tool_name 'final_answer' and "
-            "set tool_input to ONLY the numeric result (e.g., '42', not 'The answer is 42')."
+            "When providing the final answer, use tool_name 'final_answer'"
         ),
     ]
-    prompt_builder.examples = [Example(SEED_EXAMPLE)]  # One seed example
+    prompt_builder.examples = [Example(SEED_EXAMPLE)]
     
     planner = ReActPlanner(llm, tool_registry, prompt_builder=prompt_builder)
     agent = SimpleAgent(
@@ -163,7 +157,7 @@ Observation: The result of '15 + 27' is 42
         optimizer="mipro",
         max_bootstrapped_demos=4,
         dspy_lm=dspy_lm,
-        mipro_auto='medium',
+        mipro_auto='light',
         training_data_path=str(TRAINING_DATA_PATH),
     )
     
@@ -174,6 +168,27 @@ Observation: The result of '15 + 27' is 42
     print(f"Optimized agent: {len(result.examples)} examples")
     print(f"Saved to: agent_optimized.json")
     print()
+    
+    # Show what was optimized
+    last_run = result.optimization.runs[-1]
+    print("Optimization results:")
+    print(f"  - role_definition changed: {last_run.role_definition_changed}")
+    print(f"  - format_instructions changed: {last_run.format_instructions_changed}")
+    print()
+    
+    if last_run.role_definition_changed:
+        print("New role_definition:")
+        print("-" * 40)
+        print(result.role_definition[:500] + "..." if len(result.role_definition or "") > 500 else result.role_definition)
+        print()
+    
+    if last_run.format_instructions_changed:
+        print(f"New format_instructions ({len(result.format_instructions)} items):")
+        print("-" * 40)
+        for i, fi in enumerate(result.format_instructions):
+            preview = fi[:200] + "..." if len(fi) > 200 else fi
+            print(f"  [{i}]: {preview}")
+        print()
     
     # -------------------------------------------------------------------------
     # Step 3: Test optimized agent
@@ -426,12 +441,12 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     
     # Example 1: Optimize a single agent
-    # print("Running: example_optimize_agent")
-    # asyncio.run(example_optimize_agent())
+    print("Running: example_optimize_agent")
+    asyncio.run(example_optimize_agent())
     
     # Example 2: Optimize a simple LLM (no agent)
-    print("Running: example_optimize_simple_llm")
-    asyncio.run(example_optimize_simple_llm())
+    # print("Running: example_optimize_simple_llm")
+    # asyncio.run(example_optimize_simple_llm())
     
     # Example 3: Optimize a multi-agent system
     # print("Running: example_optimize_multi_agent")

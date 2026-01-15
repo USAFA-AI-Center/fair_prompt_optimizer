@@ -16,6 +16,7 @@ All modules follow the FAIRAgentModule pattern:
 - get_config() extracts optimized demos from self.predict.demos
 """
 
+import re
 import asyncio
 import gc
 import logging
@@ -26,6 +27,7 @@ import dspy
 
 from .config import (
     OptimizedConfig,
+    OptimizedPrompts,
     TrainingExample,
     DSPyTranslator,
     compute_file_hash,
@@ -37,6 +39,101 @@ from fairlib.core.prompts import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
+# Section markers for structured prompt optimization
+ROLE_START = "<ROLE_DEFINITION>"
+ROLE_END = "</ROLE_DEFINITION>"
+FORMAT_START = "<FORMAT_INSTRUCTIONS>"
+FORMAT_END = "</FORMAT_INSTRUCTIONS>"
+FORMAT_ITEM_START = "<FORMAT_ITEM>"
+FORMAT_ITEM_END = "</FORMAT_ITEM>"
+
+
+def combine_prompt_components(
+    role_definition: str,
+    format_instructions: Optional[List[str]] = None,
+) -> str:
+    """
+    Combine prompt components into a single structured string for MIPRO optimization.
+    
+    Uses XML-like markers so we can parse the optimized result back into components.
+    """
+    parts = []
+    
+    parts.append(f"{ROLE_START}")
+    parts.append(role_definition.strip())
+    parts.append(f"{ROLE_END}")
+    
+    if format_instructions:
+        parts.append("")
+        parts.append(f"{FORMAT_START}")
+        for instruction in format_instructions:
+            if isinstance(instruction, dict):
+                text = instruction.get('text', instruction.get('content', str(instruction)))
+            else:
+                text = str(instruction)
+            parts.append(f"{FORMAT_ITEM_START}")
+            parts.append(text.strip())
+            parts.append(f"{FORMAT_ITEM_END}")
+        parts.append(f"{FORMAT_END}")
+    
+    return "\n".join(parts)
+
+
+def parse_optimized_prompt(
+    optimized_text: str,
+    original_role: str,
+    original_format_instructions: Optional[List[str]] = None,
+) -> OptimizedPrompts:
+    """
+    Parse MIPRO's optimized instruction text back into prompt components.
+    
+    If parsing fails for any section, falls back to original values.
+    """
+    result = OptimizedPrompts()
+    
+    # Parse role definition
+    role_match = re.search(
+        f"{re.escape(ROLE_START)}\\s*(.+?)\\s*{re.escape(ROLE_END)}",
+        optimized_text,
+        re.DOTALL
+    )
+    if role_match:
+        result.role_definition = role_match.group(1).strip()
+        result.role_definition_changed = (result.role_definition != original_role.strip())
+    else:
+        result.role_definition = optimized_text.strip()
+        result.role_definition_changed = (result.role_definition != original_role.strip())
+        logger.debug("No ROLE_DEFINITION markers found, using entire text as role")
+    
+    # Parse format instructions
+    format_match = re.search(
+        f"{re.escape(FORMAT_START)}\\s*(.+?)\\s*{re.escape(FORMAT_END)}",
+        optimized_text,
+        re.DOTALL
+    )
+    if format_match:
+        format_content = format_match.group(1)
+        items = re.findall(
+            f"{re.escape(FORMAT_ITEM_START)}\\s*(.+?)\\s*{re.escape(FORMAT_ITEM_END)}",
+            format_content,
+            re.DOTALL
+        )
+        if items:
+            result.format_instructions = [item.strip() for item in items]
+            if original_format_instructions:
+                original_texts = [
+                    (fi.get('text', fi.get('content', str(fi))) if isinstance(fi, dict) else str(fi)).strip()
+                    for fi in original_format_instructions
+                ]
+                result.format_instructions_changed = (result.format_instructions != original_texts)
+            else:
+                result.format_instructions_changed = True
+    else:
+        result.format_instructions = original_format_instructions
+        result.format_instructions_changed = False
+        logger.debug("No FORMAT_INSTRUCTIONS markers found, keeping original")
+    
+    return result
 
 def run_async(coro):
     """
@@ -195,6 +292,21 @@ class AgentModule(dspy.Module):
         except AttributeError:
             self._initial_role = "Complete the given task."
             logger.warning("Could not extract role_definition from agent, using default")
+
+        # Extract format instructions
+        try:
+            format_instructions = self.agent.planner.prompt_builder.format_instructions
+            self._initial_format_instructions = []
+            for fi in format_instructions:
+                if hasattr(fi, 'text'):
+                    self._initial_format_instructions.append(fi.text)
+                elif hasattr(fi, 'content'):
+                    self._initial_format_instructions.append(fi.content)
+                else:
+                    self._initial_format_instructions.append(str(fi))
+        except AttributeError:
+            self._initial_format_instructions = []
+            logger.debug("Could not extract format_instructions from agent")
         
         # Extract model info
         try:
@@ -226,8 +338,17 @@ class AgentModule(dspy.Module):
     
     def _create_signature(self):
         """Create a DSPy signature from the agent's current config."""
+        # Combine all prompt components for optimization
+        if self._initial_format_instructions:
+            combined_instructions = combine_prompt_components(
+                self._initial_role,
+                self._initial_format_instructions,
+            )
+        else:
+            combined_instructions = self._initial_role
+        
         signature_dict = {
-            "__doc__": self._initial_role,
+            "__doc__": combined_instructions,
             "__annotations__": {
                 self.input_field: str,
                 self.output_field: str,
@@ -236,13 +357,6 @@ class AgentModule(dspy.Module):
             self.output_field: dspy.OutputField(desc="Agent's response"),
         }
         self.signature = type("AgentSignature", (dspy.Signature,), signature_dict)
-    
-    def _reset_agent_memory(self):
-        """Reset the agent's memory for a fresh run."""
-        try:
-            self.agent.memory.clear()
-        except Exception as e:
-            logger.debug(f"Could not reset agent memory: {e}")
     
     def forward(self, **kwargs) -> dspy.Prediction:
         """Run the agent and return only FinalAnswer."""
@@ -268,11 +382,45 @@ class AgentModule(dspy.Module):
             return None
     
     def get_optimized_role(self) -> str:
-        """Get the optimized role definition (instructions) if available."""
+        """Get the optimized role definition (instructions) if available.
+        
+        Note: For full prompt component access, use get_optimized_prompts() instead.
+        """
+        optimized = self.get_optimized_prompts()
+        return optimized.role_definition or self._initial_role
+    
+    def get_optimized_prompts(self) -> OptimizedPrompts:
+        """
+        Get all optimized prompt components.
+        
+        Parses the optimized instructions back into individual components
+        (role_definition, format_instructions) using section markers.
+        """
+        optimized_text = None
         if hasattr(self.predict, 'signature') and hasattr(self.predict.signature, 'instructions'):
             if self.predict.signature.instructions:
-                return self.predict.signature.instructions
-        return self._initial_role
+                optimized_text = self.predict.signature.instructions
+        
+        if optimized_text is None:
+            return OptimizedPrompts(
+                role_definition=self._initial_role,
+                format_instructions=self._initial_format_instructions,
+                role_definition_changed=False,
+                format_instructions_changed=False,
+            )
+        
+        return parse_optimized_prompt(
+            optimized_text,
+            self._initial_role,
+            self._initial_format_instructions,
+        )
+    
+    def _reset_agent_memory(self):
+        """Reset the agent's memory for a fresh run."""
+        try:
+            self.agent.memory.clear()
+        except Exception as e:
+            logger.debug(f"Could not reset agent memory: {e}")
     
     def get_demos(self) -> List[Dict[str, str]]:
         """Extract demos from the predict object."""
@@ -676,7 +824,15 @@ class AgentOptimizer:
         # Track starting state
         examples_before = len(self.config.examples)
         old_role = self.config.role_definition
-        new_role = old_role
+        old_format_instructions = self.config.prompts.get("format_instructions", [])
+        
+        # Initialize optimized prompts with current values
+        optimized_prompts = OptimizedPrompts(
+            role_definition=old_role,
+            format_instructions=old_format_instructions,
+            role_definition_changed=False,
+            format_instructions_changed=False,
+        )
         
         logger.info(f"Running bootstrap to select full_trace examples ({len(training_examples)} candidates)")
         # TODO:: current pattern does not allow user to have MIPRO without bootstrapping, add option to reduce run time in use cases
@@ -689,14 +845,21 @@ class AgentOptimizer:
         
         # Run MIPRO optimization 
         if optimizer == "mipro":
-            logger.info(f"Running MIPROv2 for instruction optimization (auto={mipro_auto})")
-            new_role = self._optimize_instructions_mipro(
-                training_examples, metric, dspy_lm, mipro_auto, max_labeled_demos
-            )
+            try: 
+                logger.info(f"Running MIPROv2 for instruction optimization (auto={mipro_auto})")
+                optimized_prompts = self._optimize_instructions_mipro(
+                    training_examples, metric, dspy_lm, mipro_auto, max_labeled_demos
+                )
+            except Exception as e: 
+                new_role = old_role
+                logger.error("Encountered error in MIRPOv2 optimization, using old role definition")
         
         # Update config
-        if new_role != old_role:
-            self.config.role_definition = new_role
+        if optimized_prompts.role_definition_changed and optimized_prompts.role_definition:
+            self.config.role_definition = optimized_prompts.role_definition
+        
+        if optimized_prompts.format_instructions_changed and optimized_prompts.format_instructions:
+            self.config.config["prompts"]["format_instructions"] = optimized_prompts.format_instructions
         
         if examples:
             current_examples = list(self.config.examples)
@@ -712,7 +875,8 @@ class AgentOptimizer:
             num_examples=len(training_examples),
             examples_before=examples_before,
             examples_after=len(self.config.examples),
-            role_definition_changed=(new_role != old_role),
+            role_definition_changed=optimized_prompts.role_definition_changed,
+            format_instructions_changed=optimized_prompts.format_instructions_changed,
             optimizer_config={
                 "max_bootstrapped_demos": max_bootstrapped_demos,
                 "max_labeled_demos": max_labeled_demos,
@@ -722,7 +886,8 @@ class AgentOptimizer:
         
         logger.info(f"Optimization complete. Examples: {examples_before} → {len(self.config.examples)}")
         if optimizer == "mipro":
-            logger.info(f"Role definition changed: {new_role != old_role}")
+            logger.info(f"Role definition changed: {optimized_prompts.role_definition_changed}")
+            logger.info(f"Format instructions changed: {optimized_prompts.format_instructions_changed}")
         
         return self.config
     
@@ -785,12 +950,18 @@ class AgentOptimizer:
         dspy_lm,
         mipro_auto: str,
         max_labeled_demos: int,
-    ) -> str:
+    ) -> OptimizedPrompts:
         """
-        Use MIPROv2 to optimize role_definition/instructions. #TODO:: extend this to all prompt parts
+        Use MIPROv2 to optimize all prompt components (role_definition, format_instructions).
+        
+        The prompt components are combined into a structured format with XML-like markers,
+        optimized by MIPRO, then parsed back into individual components.
         
         Note: MIPRO is for instruction optimization, not example selection.
         Examples always come from our manual bootstrap with full_trace.
+        
+        Returns:
+            OptimizedPrompts containing all optimized components
         """
         import dspy
         from dspy.teleprompt import MIPROv2
@@ -809,13 +980,24 @@ class AgentOptimizer:
                 max_labeled_demos=max_labeled_demos,
                 requires_permission_to_run=False,
             )
-            new_role = optimized.get_optimized_role()
-            logger.info(f"MIPRO optimized role definition")
-            # TODO:: here we return all pieces of the prompt builder [tool_instructions, etc.]
-            return new_role
+            
+            # Get all optimized prompt components
+            optimized_prompts = optimized.get_optimized_prompts()
+            
+            logger.info(f"MIPRO optimization complete:")
+            logger.info(f"  - role_definition changed: {optimized_prompts.role_definition_changed}")
+            logger.info(f"  - format_instructions changed: {optimized_prompts.format_instructions_changed}")
+            
+            return optimized_prompts
+            
         except Exception as e:
             logger.warning(f"MIPRO instruction optimization failed: {e}")
-            return self.config.role_definition
+            return OptimizedPrompts(
+                role_definition=self.config.role_definition,
+                format_instructions=self.config.prompts.get("format_instructions"),
+                role_definition_changed=False,
+                format_instructions_changed=False,
+            )
     
     def test(self, user_input: str) -> str:
         """Run a test input through the agent."""

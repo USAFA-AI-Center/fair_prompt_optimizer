@@ -48,7 +48,7 @@ def contains_answer(example, prediction, trace=None) -> bool:
     return expected in actual
 
 
-def numeric_accuracy(example, prediction, trace=None, tolerance: float = 0.01) -> bool:
+def numeric_accuracy(example, prediction, trace=None, tolerance: float = 0.00) -> bool:
     """
     Compare numeric values with tolerance.
     

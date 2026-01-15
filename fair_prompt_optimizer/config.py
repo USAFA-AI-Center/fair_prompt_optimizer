@@ -43,6 +43,38 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class OptimizedPrompts:
+    """
+    Container for all optimizable prompt components.
+    """
+    role_definition: Optional[str] = None
+    format_instructions: Optional[List[str]] = None
+    
+    # Track what actually changed
+    role_definition_changed: bool = False
+    format_instructions_changed: bool = False
+    
+    def has_changes(self) -> bool:
+        """Check if any component was changed."""
+        return self.role_definition_changed or self.format_instructions_changed
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "role_definition": self.role_definition,
+            "format_instructions": self.format_instructions,
+            "role_definition_changed": self.role_definition_changed,
+            "format_instructions_changed": self.format_instructions_changed,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'OptimizedPrompts':
+        return cls(
+            role_definition=data.get("role_definition"),
+            format_instructions=data.get("format_instructions"),
+            role_definition_changed=data.get("role_definition_changed", False),
+            format_instructions_changed=data.get("format_instructions_changed", False),
+        )
 
 @dataclass
 class OptimizationRun:
@@ -174,6 +206,16 @@ class OptimizedConfig:
         return cls.from_dict(data)
     
     # --- Convenience accessors ---
+
+    @property
+    def format_instructions(self) -> List[str]:
+        return self.prompts.get("format_instructions", [])
+    
+    @format_instructions.setter
+    def format_instructions(self, value: List[str]):
+        if "prompts" not in self.config:
+            self.config["prompts"] = {}
+        self.config["prompts"]["format_instructions"] = value
     
     @property
     def prompts(self) -> Dict[str, Any]:
