@@ -91,19 +91,18 @@ def parse_optimized_prompt(
     """
     result = OptimizedPrompts()
     
-    # Parse role definition
-    role_match = re.search(
-        f"{re.escape(ROLE_START)}\\s*(.+?)\\s*{re.escape(ROLE_END)}",
-        optimized_text,
-        re.DOTALL
-    )
+    # Flexible role parsing - handle LLM typos in closing tag
+    role_pattern = r"<ROLE_DEFINITION>\s*(.+?)\s*</ROLE_\w*>"
+    role_match = re.search(role_pattern, optimized_text, re.DOTALL | re.IGNORECASE)
+    
     if role_match:
         result.role_definition = role_match.group(1).strip()
         result.role_definition_changed = (result.role_definition != original_role.strip())
     else:
-        result.role_definition = optimized_text.strip()
-        result.role_definition_changed = (result.role_definition != original_role.strip())
-        logger.debug("No ROLE_DEFINITION markers found, using entire text as role")
+        # Fallback - keep original
+        result.role_definition = original_role
+        result.role_definition_changed = False
+        logger.warning("Could not parse ROLE_DEFINITION from MIPRO output")
     
     # Parse format instructions
     format_match = re.search(
@@ -193,7 +192,7 @@ class SimpleLLMModule(dspy.Module):
         self.predict = dspy.Predict(self.signature)
     
     def _create_signature(self):
-        """Create a DSPy signature from the system prompt."""
+        """Signature is just the system prompt - MIPRO optimizes this directly."""
         signature_dict = {
             "__doc__": self.system_prompt,
             "__annotations__": {
@@ -661,15 +660,17 @@ class SimpleLLMOptimizer:
         if optimizer == "mipro" and dspy_lm is None:
             raise ValueError("MIPROv2 requires dspy_lm parameter")
         
-        # Create DSPy module
-        module = SimpleLLMModule(self.llm, self.system_prompt)
+        # Initialize the DSPy module
+        module = SimpleLLMModule(
+            self.llm, 
+            self.system_prompt
+        )
         
         # Convert to DSPy format
-        translator = DSPyTranslator()
+        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
         dspy_examples = translator.to_dspy_examples(training_examples)
         
         # Track starting state
-        examples_before = len(self.config.prompts.get("examples", []))
         old_prompt = self.system_prompt
         
         logger.info(f"Starting SimpleLLM optimization with {len(dspy_examples)} examples")
@@ -698,12 +699,20 @@ class SimpleLLMOptimizer:
         
         # Extract optimized config
         new_prompt = optimized_module.get_optimized_prompt()
-        # TODO:: convert these demos to fairlib formatted strings before inserting to config
+
+        # Get demos DSPy selected
         demos = optimized_module.get_demos()
+
+        if demos:
+            demo_parts = [new_prompt, "\n# Examples:"]
+            for demo in demos:
+                inp = demo.get('user_input', '')
+                out = demo.get('response', '')
+                demo_parts.append(f"Input: {inp}\nOutput: {out}")
+            new_prompt = "\n".join(demo_parts)
         
         # Update config
         self.config.config["prompts"]["system_prompt"] = new_prompt
-        self.config.config["prompts"]["examples"] = demos 
         
         # Record provenance
         self.config.optimization.record_run(
@@ -712,7 +721,6 @@ class SimpleLLMOptimizer:
             training_data_path=training_data_path,
             training_data_hash=compute_file_hash(training_data_path) if training_data_path else None,
             num_examples=len(training_examples),
-            examples_before=examples_before,
             examples_after=len(demos),
             role_definition_changed=(new_prompt != old_prompt),
             optimizer_config={
@@ -721,8 +729,6 @@ class SimpleLLMOptimizer:
                 "mipro_auto": mipro_auto if optimizer == "mipro" else None,
             },
         )
-        
-        logger.info(f"Optimization complete. Examples: {examples_before} → {len(demos)}")
         
         return self.config
     
@@ -928,7 +934,7 @@ class AgentOptimizer:
                 # Check metric
                 score = metric(dspy_example, prediction, None)
                 
-                if score: # TODO:: this acceptance needs to be tunable, some metrics may output floats
+                if score:
                     if ex.full_trace:
                         selected.append(ex.full_trace)
                         logger.info(f"Passed (full_trace): {user_input[:40]}...")
@@ -969,7 +975,7 @@ class AgentOptimizer:
         dspy.configure(lm=dspy_lm)
         
         module = AgentModule(self.agent)
-        translator = DSPyTranslator()
+        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
         dspy_examples = translator.to_dspy_examples(training_examples)
         
         try:
@@ -1244,7 +1250,7 @@ class MultiAgentOptimizer:
         dspy.configure(lm=dspy_lm)
         
         module = MultiAgentModule(self.runner)
-        translator = DSPyTranslator()
+        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
         dspy_examples = translator.to_dspy_examples(training_examples)
         
         try:

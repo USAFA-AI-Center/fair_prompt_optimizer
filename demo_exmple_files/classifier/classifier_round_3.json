@@ -2,7 +2,7 @@
   "version": "1.0",
   "type": "simple_llm",
   "prompts": {
-    "system_prompt": "You are a sentiment classifier.\n\n# --- RESPONSE FORMAT (MANDATORY) ---\nRespond with ONLY one of:\nSENTIMENT: positive\nSENTIMENT: negative\nSENTIMENT: neutral\n\nNo explanations, just the label.",
+    "system_prompt": "Analyze the input text to determine its sentiment, using a combination of natural language processing techniques and machine learning algorithms. Your classification should be one of three: positive, negative, or neutral.\n\n# Examples:\nInput: Amazing quality! Exceeded all my expectations.\nOutput: SENTIMENT: positive\nInput: I absolutely love this product! Best purchase I've ever made.\nOutput: SENTIMENT: positive\nInput: This is terrible. Complete waste of money.\nOutput: SENTIMENT: negative",
     "examples": []
   },
   "model": {
@@ -13,39 +13,24 @@
   "optimization": {
     "runs": [
       {
-        "timestamp": "2026-01-14T19:31:49.655894",
-        "optimizer": "bootstrap",
-        "metric": "format_compliance_SENTIMENT:",
+        "timestamp": "2026-01-20T21:29:49.583343",
+        "optimizer": "mipro",
+        "metric": "sentiment_format_metric",
         "training_data_hash": null,
         "examples_before": 0,
-        "examples_after": 4,
-        "role_definition_changed": false,
-        "format_instructions_changed": false,
-        "optimizer_config": {
-          "max_bootstrapped_demos": 3,
-          "max_labeled_demos": 4,
-          "mipro_auto": null
-        }
-      },
-      {
-        "timestamp": "2026-01-14T19:44:22.649635",
-        "optimizer": "mipro",
-        "metric": "format_compliance_SENTIMENT:",
-        "training_data_hash": null,
-        "examples_before": 4,
         "examples_after": 0,
-        "role_definition_changed": false,
+        "role_definition_changed": true,
         "format_instructions_changed": false,
         "optimizer_config": {
           "max_bootstrapped_demos": 3,
           "max_labeled_demos": 4,
-          "mipro_auto": "light"
+          "mipro_auto": "medium"
         }
       },
       {
-        "timestamp": "2026-01-14T19:53:24.295987",
+        "timestamp": "2026-01-20T21:36:48.137414",
         "optimizer": "mipro",
-        "metric": "format_compliance_SENTIMENT:",
+        "metric": "sentiment_format_metric",
         "training_data_hash": null,
         "examples_before": 0,
         "examples_after": 0,
@@ -54,7 +39,22 @@
         "optimizer_config": {
           "max_bootstrapped_demos": 3,
           "max_labeled_demos": 4,
-          "mipro_auto": "light"
+          "mipro_auto": "medium"
+        }
+      },
+      {
+        "timestamp": "2026-01-20T21:42:23.944178",
+        "optimizer": "mipro",
+        "metric": "sentiment_format_metric",
+        "training_data_hash": null,
+        "examples_before": 0,
+        "examples_after": 0,
+        "role_definition_changed": false,
+        "format_instructions_changed": false,
+        "optimizer_config": {
+          "max_bootstrapped_demos": 3,
+          "max_labeled_demos": 4,
+          "mipro_auto": "medium"
         }
       }
     ]

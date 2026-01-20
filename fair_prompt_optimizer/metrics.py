@@ -26,6 +26,66 @@ def _get_attr(obj, attr: str, default: str = '') -> str:
     return default
 
 
+def json_format_compliance(example, prediction, trace=None) -> bool:
+    """
+    Detects if malformed JSON leaked through to the final answer.
+    
+    Returns True if the output appears to be a clean final answer.
+    Returns False if the output contains JSON fragments (indicating parse failure).
+    
+    TODO: This doesn't catch Case 2 where the model ignores format entirely
+    and outputs natural language like "The answer is 20." That case requires
+    instrumenting FinalAnswer.from_tool in fair_llm.
+    """
+    response = str(_get_attr(prediction, 'response')).strip()
+    
+    # Indicators that malformed JSON leaked through
+    json_fragments = [
+        '{"thought"',
+        '{"action"',
+        '"tool_name"',
+        '"tool_input"',
+        '{"thought":',
+        '{"action":',
+    ]
+    
+    # Check if response contains JSON structure fragments
+    for fragment in json_fragments:
+        if fragment in response:
+            return False
+    
+    if response.startswith('{') and not response.endswith('}'):
+        return False  # Truncated JSON
+    
+    if response.startswith('{') and 'thought' in response.lower():
+        return False  # Looks like a ReAct response that leaked
+    
+    return True
+
+
+def numeric_accuracy_with_format(example, prediction, trace=None, tolerance: float = 0.00) -> float:
+    """
+    Combined metric: answer must be correct AND properly formatted.
+    
+    Returns:
+        1.0 - Correct answer via clean format
+        0.5 - Correct answer but malformed JSON leaked (format failure)
+        0.0 - Wrong answer
+    
+    TODO: Add Case 2 detection (natural language bypass) once 
+    FinalAnswer.from_tool is implemented in fair_llm.
+    """
+    format_ok = json_format_compliance(example, prediction, trace)
+    answer_ok = numeric_accuracy(example, prediction, trace, tolerance)
+    
+    if answer_ok and format_ok:
+        return 1.0
+    elif answer_ok and not format_ok:
+        return 0.5  # Got lucky with fallback
+    else:
+        return 0.0
+
+
 def exact_match(example, prediction, trace=None) -> bool:
     """
     Exact string match between expected and actual output.
@@ -86,6 +146,40 @@ def format_compliance(prefix: str) -> Callable:
     
     metric.__name__ = f"format_compliance_{prefix}"
     return metric
+
+def sentiment_format_metric(example, prediction, trace=None) -> float:
+    """
+    Graduated metric for sentiment FORMAT compliance only.
+    
+    We don't care if classification is correct - just the format.
+    
+    Returns:
+        1.0 - Perfect format: "SENTIMENT: positive/negative/neutral"
+        0.5 - Has "SENTIMENT" somewhere but not perfect format
+        0.3 - Outputs a valid label (positive/negative/neutral) without prefix
+        0.0 - Garbage output
+    """
+    actual = str(_get_attr(prediction, 'response')).strip().lower()
+    
+    valid_labels = ['positive', 'negative', 'neutral']
+    
+    for label in valid_labels:
+        if actual == f"sentiment: {label}":
+            return 1.0
+    
+    if actual.startswith("sentiment:"):
+        return 0.8
+    
+    if "sentiment" in actual:
+        return 0.5
+    
+    for label in valid_labels:
+        if actual == label:
+            return 0.3
+        if label in actual and len(actual) < 50:
+            return 0.2
+    
+    return 0.0
 
 
 def fuzzy_match(example, prediction, trace=None, threshold: float = 0.8) -> float:

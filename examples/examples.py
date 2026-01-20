@@ -1,18 +1,6 @@
 #!/usr/bin/env python3
 """
 FAIR Prompt Optimizer - Complete Examples
-
-Demonstrates all optimization workflows:
-1. example_optimize_agent()        - Optimize a single agent with full-trace examples
-2. example_optimize_simple_llm()   - Optimize a base LLM (no agent/tools)
-3. example_optimize_multi_agent()  - Optimize a multi-agent system
-4. example_iterative_optimization() - Multiple rounds of optimization
-5. example_compare_agents()        - Compare optimized vs non-optimized
-6. example_mipro_optimization()    - Use MIPROv2 for instruction optimization
-
-All examples use:
-- ReActPlanner (JSON format) for structured output
-- Full-trace examples loaded from training_data/math_examples.json
 """
 
 # suppress warnings from uneeded packages
@@ -157,7 +145,7 @@ Observation: The result of 15 + 27 is 42
         optimizer="mipro",
         max_bootstrapped_demos=4,
         dspy_lm=dspy_lm,
-        mipro_auto='heavy',
+        mipro_auto='light',
         training_data_path=str(TRAINING_DATA_PATH),
     )
     
@@ -223,8 +211,9 @@ async def example_optimize_simple_llm():
     
     from fair_prompt_optimizer import (
         SimpleLLMOptimizer,
-        format_compliance,
+        sentiment_format_metric,
         load_optimized_config,
+        format_compliance,
     )
     
     print("=" * 60)
@@ -233,28 +222,13 @@ async def example_optimize_simple_llm():
     print()
     
     llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
-    
-    # System prompt for sentiment classification
-    system_prompt = """You are a sentiment classifier.
-
-# --- RESPONSE FORMAT (MANDATORY) ---
-Respond with ONLY one of:
-SENTIMENT: positive
-SENTIMENT: negative
-SENTIMENT: neutral
-
-No explanations, just the label."""
 
     # Training examples (no full_trace needed for simple LLM)
     training_examples = load_training_examples(str(SENTIMENT_DATA_PATH))
-    
-    print(f"System prompt: {len(system_prompt)} chars")
-    print(f"Training examples: {len(training_examples)}")
-    print()
 
     opt_config = load_optimized_config("classifier_initial.json")
     
-    optimizer = SimpleLLMOptimizer(llm=llm, system_prompt=system_prompt, config=opt_config)
+    optimizer = SimpleLLMOptimizer(llm=llm, system_prompt=opt_config.prompts["system_prompt"], config=opt_config)
     
     # needed for generating MIPRO candidate prompts
     dspy_lm = dspy.LM(
@@ -265,8 +239,9 @@ No explanations, just the label."""
     result = optimizer.compile(
         training_examples=training_examples,
         metric=format_compliance("SENTIMENT:"),
-        optimizer="bootstrap",
-        # dspy_lm=dspy_lm,
+        optimizer="mipro",
+        mipro_auto="medium",
+        dspy_lm=dspy_lm,
         max_bootstrapped_demos=3,
     )
     
@@ -441,12 +416,12 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     
     # Example 1: Optimize a single agent
-    print("Running: example_optimize_agent")
-    asyncio.run(example_optimize_agent())
+    # print("Running: example_optimize_agent")
+    # asyncio.run(example_optimize_agent())
     
     # Example 2: Optimize a simple LLM (no agent)
-    # print("Running: example_optimize_simple_llm")
-    # asyncio.run(example_optimize_simple_llm())
+    print("Running: example_optimize_simple_llm")
+    asyncio.run(example_optimize_simple_llm())
     
     # Example 3: Optimize a multi-agent system
     # print("Running: example_optimize_multi_agent")

@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "type": "agent",
+  "prompts": {
+    "role_definition": "You are a math helper in a high-stakes competition where you will be tested on your ability to solve complex mathematical problems under pressure. The audience is watching, and every mistake could cost you the competition.",
+    "tool_instructions": [],
+    "worker_instructions": [],
+    "format_instructions": [
+      "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing 'thought' and 'action' keys. Your thought process should be clear and concise, showing your step-by-step reasoning behind your answer. Your action should include the final answer and any supporting evidence.",
+      "# --- FINAL ANSWER FORMAT ---\nWhen providing the final answer, use tool_name 'final_answer'. Make sure to clearly label your answer as the \"Final Answer\" to avoid any confusion."
+    ],
+    "examples": [
+      "# --- Example ---\n\"What is 15 + 27?\"\n\n{\n    \"thought\": \"I need to add 15 and 27. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"15 + 27\"\n    }\n}\n\nObservation: The result of 15 + 27 is 42\n\n{\n    \"thought\": \"The calculator returned 42. I will provide this as the final answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"42\"\n    }\n}",
+      "# --- Example: Division ---\n\"Calculate 144 / 12\"\n\n{\n    \"thought\": \"I need to divide 144 by 12. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"144 / 12\"\n    }\n}\n\nObservation: The result of '144 / 12' is 12.0\n\n{\n    \"thought\": \"The calculator shows 144 divided by 12 equals 12.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"12\"\n    }\n}",
+      "# --- Example: Addition ---\n\"What is 15 + 27?\"\n\n{\n    \"thought\": \"I need to add 15 and 27. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"15 + 27\"\n    }\n}\n\nObservation: The result of '15 + 27' is 42\n\n{\n    \"thought\": \"The calculator shows 15 + 27 equals 42.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"42\"\n    }\n}",
+      "# --- Example: Multiplication ---\n\"Compute 8 * 7\"\n\n{\n    \"thought\": \"I need to multiply 8 by 7. I will use the calculator.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"8 * 7\"\n    }\n}\n\nObservation: The result of '8 * 7' is 56\n\n{\n    \"thought\": \"The calculator shows 8 multiplied by 7 equals 56.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"56\"\n    }\n}",
+      "# --- Example: Percentage ---\n\"What is 75% of 120?\"\n\n{\n    \"thought\": \"I need to calculate 75% of 120. I will convert 75% to 0.75 and multiply by 120.\",\n    \"action\": {\n        \"tool_name\": \"safe_calculator\",\n        \"tool_input\": \"0.75 * 120\"\n    }\n}\n\nObservation: The result of '0.75 * 120' is 90.0\n\n{\n    \"thought\": \"The calculator returned 90.0. So 75% of 120 is 90.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"90\"\n    }\n}"
+    ]
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "agent_type": "SimpleAgent",
+    "planner_type": "ReActPlanner",
+    "tools": [
+      "SafeCalculatorTool"
+    ],
+    "max_steps": 10,
+    "stateless": false
+  },
+  "metadata": {
+    "exported_at": "2026-01-20T18:39:03.905173",
+    "source": "fairlib.utils.config_manager"
+  },
+  "optimization": {
+    "runs": [
+      {
+        "timestamp": "2026-01-20T19:02:12.848286",
+        "optimizer": "mipro",
+        "metric": "numeric_accuracy",
+        "training_data_hash": "sha256:8c30732e59038c02",
+        "examples_before": 1,
+        "examples_after": 5,
+        "role_definition_changed": true,
+        "format_instructions_changed": true,
+        "optimizer_config": {
+          "max_bootstrapped_demos": 4,
+          "max_labeled_demos": 4,
+          "mipro_auto": "light"
+        }
+      }
+    ]
+  }
+}
