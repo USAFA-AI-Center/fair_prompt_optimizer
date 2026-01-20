@@ -157,7 +157,7 @@ Observation: The result of 15 + 27 is 42
         optimizer="mipro",
         max_bootstrapped_demos=4,
         dspy_lm=dspy_lm,
-        mipro_auto='light',
+        mipro_auto='heavy',
         training_data_path=str(TRAINING_DATA_PATH),
     )
     
