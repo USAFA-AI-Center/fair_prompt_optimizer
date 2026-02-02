@@ -25,6 +25,7 @@ try:
         apply_prompts,
         extract_config,
         load_agent_config,
+        extract_multi_agent_config,
     )
 
     from fairlib.core.prompts import PromptBuilder

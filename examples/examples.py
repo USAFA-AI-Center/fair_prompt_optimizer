@@ -10,6 +10,7 @@ litellm.set_verbose = False
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 import dspy
 
@@ -24,6 +25,9 @@ from fair_prompt_optimizer import load_training_examples
 # paths to datasets
 SENTIMENT_DATA_PATH = Path(__file__).parent / "training_data" / "sentiment_examples.json"
 TRAINING_DATA_PATH = Path(__file__).parent / "training_data" / "math_examples.json"
+RESEARCH_MANAGER_DATA_PATH = Path(__file__).parent / "training_data" / "research_manager_examples.json"
+RESEARCH_DATAGATHERER_DATA_PATH = Path(__file__).parent / "training_data" / "research_datagatherer_examples.json"
+RESEARCH_SUMMARIZER_DATA_PATH = Path(__file__).parent / "training_data" / "research_summarizer_examples.json"
 
 
 # =============================================================================
@@ -267,11 +271,14 @@ async def example_optimize_simple_llm():
 # Example 3: Optimize a Multi-Agent System
 # =============================================================================
 
-async def example_optimize_multi_agent():
+async def example_optimize_research_team():
     """
-    Optimize a multi-agent system with manager and workers.
+    Optimize a research team multi-agent system.
     
-    Use case: complex tasks requiring coordination between specialized agents.
+    Architecture:
+    - Manager: Orchestrates research tasks
+    - DataGatherer: Searches the web for information
+    - Summarizer: Synthesizes and summarizes findings
     """
     from fairlib import (
         HuggingFaceAdapter,
@@ -286,68 +293,136 @@ async def example_optimize_multi_agent():
         RoleDefinition,
         FormatInstruction,
         WorkerInstruction,
+        Example,
     )
-    from fairlib.modules.action.tools.builtin_tools.safe_calculator import SafeCalculatorTool
     from fairlib.modules.orchestration.hierarchical_runner import HierarchicalAgentRunner
     from fairlib.utils.config_manager import save_multi_agent_config, load_multi_agent
+    from fairlib.modules.action.tools.web_searcher import WebSearcherTool
     
     from fair_prompt_optimizer import (
         MultiAgentOptimizer,
         load_training_examples,
-        contains_answer,
     )
     
     print("=" * 60)
-    print("EXAMPLE 3: OPTIMIZE MULTI-AGENT SYSTEM")
+    print("EXAMPLE 4: OPTIMIZE RESEARCH TEAM")
     print("=" * 60)
     print()
     
     llm = HuggingFaceAdapter("dolphin3-qwen25-3b")
     
     # -------------------------------------------------------------------------
-    # Create Calculator Worker
+    # Web Search Configuration
     # -------------------------------------------------------------------------
-    calc_registry = ToolRegistry()
-    calc_registry.register_tool(SafeCalculatorTool())
+    web_search_config = {
+        "google_api_key": os.environ.get("GOOGLE_API_KEY", ""),
+        "google_search_engine_id": os.environ.get("GOOGLE_SEARCH_ENGINE_ID", ""),
+        "max_results": 5,
+        "cache_ttl": 3600,
+    }
     
-    calc_builder = PromptBuilder()
-    calc_builder.role_definition = RoleDefinition(
-        "You are a calculator specialist. Use safe_calculator for all math."
+    # -------------------------------------------------------------------------
+    # Create DataGatherer Worker
+    # -------------------------------------------------------------------------
+    gatherer_registry = ToolRegistry()
+    gatherer_registry.register_tool(WebSearcherTool(web_search_config))
+    
+    gatherer_builder = PromptBuilder()
+    gatherer_builder.role_definition = RoleDefinition(
+        "You are a research data gatherer. Your job is to search the web for "
+        "relevant, accurate, and up-to-date information on the given topic. "
+        "Focus on finding authoritative sources."
     )
-    calc_builder.format_instructions = [
+    gatherer_builder.format_instructions = [
         FormatInstruction(
-            "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"...\", \"tool_input\": \"...\"}}"
+            '# --- RESPONSE FORMAT ---\n'
+            'Respond with a JSON object containing "thought" and "action" keys.\n'
+            'Use the web_searcher tool to find information.\n'
+            'Example: {"thought": "I need to search for...", "action": {"tool_name": "web_searcher", "tool_input": "search query"}}'
+        ),
+        FormatInstruction(
+            '# --- FINAL ANSWER FORMAT ---\n'
+            'When you have gathered sufficient information, use tool_name "final_answer" '
+            'with the search results as tool_input.'
         ),
     ]
-    calc_builder.examples = []
     
-    calc_planner = ReActPlanner(llm, calc_registry, prompt_builder=calc_builder)
-    calculator_worker = SimpleAgent(
+    gatherer_planner = ReActPlanner(llm, gatherer_registry, prompt_builder=gatherer_builder)
+    data_gatherer = SimpleAgent(
         llm=llm,
-        planner=calc_planner,
-        tool_executor=ToolExecutor(calc_registry),
+        planner=gatherer_planner,
+        tool_executor=ToolExecutor(gatherer_registry),
         memory=WorkingMemory(),
         max_steps=5,
     )
     
     # -------------------------------------------------------------------------
-    # Create Manager
+    # Create Summarizer Worker
     # -------------------------------------------------------------------------
-    manager_registry = ToolRegistry()
+    summarizer_registry = ToolRegistry()  # No tools - pure LLM reasoning
+    
+    summarizer_builder = PromptBuilder()
+    summarizer_builder.role_definition = RoleDefinition(
+        "You are a research summarizer. Your job is to take raw research data "
+        "and synthesize it into a clear, concise, and accurate summary. "
+        "Highlight key findings, identify patterns, and note any conflicting information."
+    )
+    summarizer_builder.format_instructions = [
+        FormatInstruction(
+            '# --- RESPONSE FORMAT ---\n'
+            'Respond with a JSON object containing "thought" and "action" keys.\n'
+            'Analyze the provided research data and formulate your summary.'
+        ),
+        FormatInstruction(
+            '# --- FINAL ANSWER FORMAT ---\n'
+            'Provide your summary using tool_name "final_answer" with the summary as tool_input.'
+        ),
+    ]
+    
+    summarizer_planner = ReActPlanner(llm, summarizer_registry, prompt_builder=summarizer_builder)
+    summarizer = SimpleAgent(
+        llm=llm,
+        planner=summarizer_planner,
+        tool_executor=ToolExecutor(summarizer_registry),
+        memory=WorkingMemory(),
+        max_steps=3,
+    )
+    
+    # -------------------------------------------------------------------------
+    # Create Manager Agent
+    # -------------------------------------------------------------------------
+    manager_registry = ToolRegistry()  # Workers are registered as tools by HierarchicalAgentRunner
     
     manager_builder = PromptBuilder()
     manager_builder.role_definition = RoleDefinition(
-        "You are a manager that delegates math problems to the Calculator worker."
+        "You are a research team manager. Your job is to coordinate research tasks "
+        "by delegating to your team members. First use DataGatherer to collect information, "
+        "then use Summarizer to synthesize the findings into a coherent response."
     )
     manager_builder.format_instructions = [
         FormatInstruction(
-            "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"Calculator\", \"tool_input\": \"task\"}}"
+            '# --- RESPONSE FORMAT ---\n'
+            'Respond with a JSON object containing "thought" and "action" keys.\n'
+            'Delegate tasks to your workers using their names as tool_name.\n'
+            'Example: {"thought": "I need to gather data on...", "action": {"tool_name": "DataGatherer", "tool_input": "research topic"}}'
+        ),
+        FormatInstruction(
+            '# --- WORKFLOW ---\n'
+            '1. First, delegate to DataGatherer to search for information\n'
+            '2. Then, delegate to Summarizer with the gathered data\n'
+            '3. Finally, provide the summarized response as final_answer'
         ),
     ]
     manager_builder.worker_instructions = [
-        WorkerInstruction(name="Calculator", role_description="Handles math calculations."),
+        WorkerInstruction(
+            name="DataGatherer", 
+            role_description="Searches the web for relevant information on a topic. Input: search topic. Output: raw search results."
+        ),
+        WorkerInstruction(
+            name="Summarizer", 
+            role_description="Synthesizes raw data into a clear summary. Input: raw research data. Output: concise summary."
+        ),
     ]
-    manager_builder.examples = []
     
     manager_planner = ReActPlanner(llm, manager_registry, prompt_builder=manager_builder)
     manager_agent = SimpleAgent(
@@ -355,49 +430,113 @@ async def example_optimize_multi_agent():
         planner=manager_planner,
         tool_executor=ToolExecutor(manager_registry),
         memory=WorkingMemory(),
-        max_steps=5,
+        max_steps=8,  # More steps for multi-hop coordination
     )
     
     # -------------------------------------------------------------------------
-    # Create Runner and Optimize
+    # Create Runner
     # -------------------------------------------------------------------------
     runner = HierarchicalAgentRunner(
         manager=manager_agent,
-        workers={"Calculator": calculator_worker},
+        workers={
+            "DataGatherer": data_gatherer,
+            "Summarizer": summarizer,
+        },
     )
     
-    save_multi_agent_config(runner, "multi_agent_initial.json")
-    print(f"Initial multi-agent system saved")
+    save_multi_agent_config(runner, "research_team_initial.json")
+    print("Initial research team saved")
     
-    training_examples = load_training_examples(str(TRAINING_DATA_PATH))
-    
-    optimizer = MultiAgentOptimizer(runner)
-    
-    result = optimizer.compile(
-        training_examples=training_examples[:4],
-        metric=contains_answer,
-        optimizer="bootstrap",
-        optimize_manager=True,
-        optimize_workers=False,
-        max_bootstrapped_demos=2,
-    )
-    
-    result.save("multi_agent_optimized.json")
-    
-    print(f"Optimized multi-agent system saved")
-    print(f"Optimization runs: {len(result.optimization.runs)}")
-    print()
-    
-    # Test
-    print("Testing optimized multi-agent system:")
+    # -------------------------------------------------------------------------
+    # Test baseline (before optimization)
+    # -------------------------------------------------------------------------
+    print("\nTesting baseline research team:")
     print("-" * 40)
     
-    optimized_runner = load_multi_agent("multi_agent_optimized.json", llm)
-    test_result = await optimized_runner.run("What is 50% of 80?")
-    print(f"Q: What is 50% of 80?")
-    print(f"A: {test_result}")
+    test_query = "What are the latest developments in quantum computing?"
+    try:
+        result = await runner.run(test_query)
+        print(f"Q: {test_query}")
+        print(f"A: {result[:500]}..." if len(str(result)) > 500 else f"A: {result}")
+    except Exception as e:
+        print(f"Baseline test failed: {e}")
     
-    return optimizer
+    # -------------------------------------------------------------------------
+    # Load training examples and optimize
+    # -------------------------------------------------------------------------
+
+    # Load manager training examples
+    if not RESEARCH_MANAGER_DATA_PATH.exists():
+        print(f"\nNo manager training data found at {RESEARCH_MANAGER_DATA_PATH}")
+        return runner
+
+    manager_examples = load_training_examples(str(RESEARCH_MANAGER_DATA_PATH))
+    print(f"\nLoaded {len(manager_examples)} manager training examples")
+
+    # Load worker training examples (for recursive optimization)
+    worker_training_examples = {}
+
+    if RESEARCH_DATAGATHERER_DATA_PATH.exists():
+        gatherer_examples = load_training_examples(str(RESEARCH_DATAGATHERER_DATA_PATH))
+        worker_training_examples["DataGatherer"] = gatherer_examples
+        print(f"Loaded {len(gatherer_examples)} DataGatherer training examples")
+
+    if RESEARCH_SUMMARIZER_DATA_PATH.exists():
+        summarizer_examples = load_training_examples(str(RESEARCH_SUMMARIZER_DATA_PATH))
+        worker_training_examples["Summarizer"] = summarizer_examples
+        print(f"Loaded {len(summarizer_examples)} Summarizer training examples")
+
+    # Create optimizer with both manager and worker optimization enabled
+    optimizer = MultiAgentOptimizer(
+        runner,
+        optimize_manager=True,
+        optimize_workers=True,  # Enable recursive worker optimization
+    )
+
+    dspy_lm = dspy.LM(
+        'ollama_chat/llama3.1:8b',
+        api_base='http://localhost:11434'
+    )
+
+    print("\nStarting recursive multi-agent optimization...")
+    print("-" * 40)
+
+    result = optimizer.compile(
+        training_examples=manager_examples,
+        metric=research_quality_metric,
+        worker_training_examples=worker_training_examples,  # Per-worker training data
+        # worker_metrics={...},  # Optional: per-worker custom metrics
+        optimizer="mipro",
+        max_bootstrapped_demos=2,
+        dspy_lm=dspy_lm,
+        mipro_auto='light',
+    )
+
+    result.save("research_team_optimized.json")
+
+    print()
+    print("=" * 40)
+    print("OPTIMIZATION RESULTS")
+    print("=" * 40)
+    print(f"Config saved to: research_team_optimized.json")
+    print(f"Optimization runs: {len(result.optimization.runs)}")
+
+    # Show what was optimized
+    last_run = result.optimization.runs[-1]
+    print(f"\nManager optimization:")
+    print(f"  - role_definition changed: {last_run.role_definition_changed}")
+    print(f"  - examples: {last_run.examples_before} -> {last_run.examples_after}")
+
+    workers_optimized = last_run.optimizer_config.get("workers_optimized", [])
+    if workers_optimized:
+        print(f"\nWorkers optimized: {workers_optimized}")
+        for worker_name in workers_optimized:
+            worker_config = result.config.get("workers", {}).get(worker_name, {})
+            worker_prompts = worker_config.get("prompts", {})
+            worker_examples = worker_prompts.get("examples", [])
+            print(f"  - {worker_name}: {len(worker_examples)} examples")
+
+    return runner
 
 
 # =============================================================================

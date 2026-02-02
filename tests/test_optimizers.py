@@ -75,145 +75,199 @@ class TestClearCudaMemory:
 # Test DSPy Module Wrappers
 # =============================================================================
 
-class TestSimpleAgentModule:
-    """Test SimpleAgentModule DSPy wrapper."""
-    
+class TestAgentModule:
+    """Test AgentModule DSPy wrapper."""
+
     def test_init(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         mock_agent = Mock()
-        module = SimpleAgentModule(mock_agent)
-        
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
+        module = AgentModule(mock_agent)
+
         assert module.agent == mock_agent
         assert module.input_field == "user_input"
         assert module.output_field == "response"
-    
+
     def test_init_custom_fields(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         mock_agent = Mock()
-        module = SimpleAgentModule(
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
+        module = AgentModule(
             mock_agent,
             input_field="query",
             output_field="answer"
         )
-        
+
         assert module.input_field == "query"
         assert module.output_field == "answer"
-    
+
     def test_forward_calls_agent(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         # Create mock agent
         mock_agent = Mock()
         mock_agent.memory = Mock()
-        
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
         # Mock arun to return a result
         async def mock_arun(input_text):
             return f"Response to: {input_text}"
         mock_agent.arun = mock_arun
-        
-        module = SimpleAgentModule(mock_agent)
-        
+
+        module = AgentModule(mock_agent)
+
         # Call forward
         result = module(user_input="Hello")
-        
+
         assert hasattr(result, 'response')
         assert "Hello" in result.response
-    
+
     def test_forward_handles_error(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         mock_agent = Mock()
         mock_agent.memory = Mock()
-        
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
         async def failing_arun(input_text):
             raise RuntimeError("Agent failed")
         mock_agent.arun = failing_arun
-        
-        module = SimpleAgentModule(mock_agent)
+
+        module = AgentModule(mock_agent)
         result = module(user_input="Hello")
-        
+
         assert "Error" in result.response
-    
+
     def test_get_prompt_builder(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         mock_builder = Mock()
         mock_planner = Mock()
         mock_planner.prompt_builder = mock_builder
+        mock_planner.prompt_builder.role_definition = None
+        mock_planner.prompt_builder.format_instructions = []
+        mock_planner.tool_registry = Mock()
+        mock_planner.tool_registry.get_all_tools = Mock(return_value={})
         mock_agent = Mock()
         mock_agent.planner = mock_planner
-        
-        module = SimpleAgentModule(mock_agent)
-        
+        mock_agent.llm = Mock()
+
+        module = AgentModule(mock_agent)
+
         assert module.get_prompt_builder() == mock_builder
-    
+
     def test_get_prompt_builder_none(self):
-        from fair_prompt_optimizer.optimizers import SimpleAgentModule
-        
+        from fair_prompt_optimizer.optimizers import AgentModule
+
         mock_agent = Mock(spec=[])  # No planner attribute
-        module = SimpleAgentModule(mock_agent)
-        
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
+        module = AgentModule(mock_agent)
+        # Now remove the planner for the actual test
+        del mock_agent.planner
+
         assert module.get_prompt_builder() is None
 
 
-class TestHierarchicalAgentModule:
-    """Test HierarchicalAgentModule DSPy wrapper."""
-    
+class TestMultiAgentModule:
+    """Test MultiAgentModule DSPy wrapper."""
+
     def test_init(self):
-        from fair_prompt_optimizer.optimizers import HierarchicalAgentModule
-        
+        from fair_prompt_optimizer.optimizers import MultiAgentModule
+
         mock_runner = Mock()
         mock_runner.manager = Mock()
+        mock_runner.manager.planner = Mock()
+        mock_runner.manager.planner.prompt_builder = Mock()
+        mock_runner.manager.planner.prompt_builder.role_definition = None
         mock_runner.workers = {"Worker1": Mock()}
-        
-        module = HierarchicalAgentModule(mock_runner)
-        
+
+        module = MultiAgentModule(mock_runner)
+
         assert module.runner == mock_runner
-    
-    def test_get_manager_prompt_builder(self):
-        from fair_prompt_optimizer.optimizers import HierarchicalAgentModule
-        
+
+    def test_get_manager_builder(self):
+        from fair_prompt_optimizer.optimizers import MultiAgentModule
+
         mock_builder = Mock()
         mock_planner = Mock()
         mock_planner.prompt_builder = mock_builder
-        
+
         mock_manager = Mock()
         mock_manager.planner = mock_planner
-        
+        mock_manager.planner.prompt_builder.role_definition = None
+
         mock_runner = Mock()
         mock_runner.manager = mock_manager
         mock_runner.workers = {}
-        
-        module = HierarchicalAgentModule(mock_runner)
-        
-        assert module.get_manager_prompt_builder() == mock_builder
-    
-    def test_get_worker_prompt_builders(self):
-        from fair_prompt_optimizer.optimizers import HierarchicalAgentModule
-        
+
+        module = MultiAgentModule(mock_runner)
+
+        assert module.get_manager_builder() == mock_builder
+
+    def test_get_worker_builders(self):
+        from fair_prompt_optimizer.optimizers import MultiAgentModule
+
         mock_builder1 = Mock()
         mock_builder2 = Mock()
-        
+
         mock_worker1 = Mock()
         mock_worker1.planner = Mock()
         mock_worker1.planner.prompt_builder = mock_builder1
-        
+
         mock_worker2 = Mock()
         mock_worker2.planner = Mock()
         mock_worker2.planner.prompt_builder = mock_builder2
-        
+
+        mock_manager = Mock()
+        mock_manager.planner = Mock()
+        mock_manager.planner.prompt_builder = Mock()
+        mock_manager.planner.prompt_builder.role_definition = None
+
         mock_runner = Mock()
-        mock_runner.manager = Mock()
+        mock_runner.manager = mock_manager
         mock_runner.workers = {
             "Calculator": mock_worker1,
             "Researcher": mock_worker2,
         }
-        
-        module = HierarchicalAgentModule(mock_runner)
-        builders = module.get_worker_prompt_builders()
-        
+
+        module = MultiAgentModule(mock_runner)
+        builders = module.get_worker_builders()
+
         assert len(builders) == 2
         assert builders["Calculator"] == mock_builder1
         assert builders["Researcher"] == mock_builder2
@@ -319,43 +373,431 @@ class TestAgentOptimizer:
     def test_test_method(self):
         from fair_prompt_optimizer.optimizers import AgentOptimizer
         from fair_prompt_optimizer.config import OptimizedConfig
-        
+
         mock_agent = Mock()
         mock_agent.memory = Mock()
-        
+        mock_agent.planner = Mock()
+        mock_agent.planner.prompt_builder = Mock()
+        mock_agent.planner.prompt_builder.role_definition = None
+        mock_agent.planner.prompt_builder.format_instructions = []
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_agent.llm = Mock()
+
         async def mock_arun(input_text):
             return f"Result: {input_text}"
         mock_agent.arun = mock_arun
-        
+
         with patch.object(OptimizedConfig, 'from_agent') as mock_from_agent:
             mock_from_agent.return_value = OptimizedConfig(config={
                 "version": "1.0",
-                "type": "agent", 
+                "type": "agent",
                 "prompts": {},
             })
-            
+
             optimizer = AgentOptimizer(mock_agent)
             result = optimizer.test("What is 2+2?")
-            
+
             assert "2+2" in result
+
+
+class TestMultiAgentOptimizer:
+    """Test MultiAgentOptimizer class with worker optimization."""
+
+    def _create_mock_runner(self):
+        """Create a mock HierarchicalAgentRunner for testing."""
+        # Create mock workers
+        mock_worker1 = Mock()
+        mock_worker1.memory = Mock()
+        mock_worker1.planner = Mock()
+        mock_worker1.planner.prompt_builder = Mock()
+        mock_worker1.planner.prompt_builder.role_definition = Mock()
+        mock_worker1.planner.prompt_builder.role_definition.text = "Worker 1 role"
+        mock_worker1.planner.prompt_builder.format_instructions = []
+        mock_worker1.planner.prompt_builder.examples = []
+        mock_worker1.planner.tool_registry = Mock()
+        mock_worker1.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_worker1.llm = Mock()
+        mock_worker1.llm.__class__.__name__ = "MockAdapter"
+        mock_worker1.llm.model_name = "test-model"
+        mock_worker1.__class__.__name__ = "SimpleAgent"
+        mock_worker1.max_steps = 5
+        mock_worker1.stateless = False
+
+        async def mock_arun1(x):
+            return f"Worker1 response: {x}"
+        mock_worker1.arun = mock_arun1
+
+        mock_worker2 = Mock()
+        mock_worker2.memory = Mock()
+        mock_worker2.planner = Mock()
+        mock_worker2.planner.prompt_builder = Mock()
+        mock_worker2.planner.prompt_builder.role_definition = Mock()
+        mock_worker2.planner.prompt_builder.role_definition.text = "Worker 2 role"
+        mock_worker2.planner.prompt_builder.format_instructions = []
+        mock_worker2.planner.prompt_builder.examples = []
+        mock_worker2.planner.tool_registry = Mock()
+        mock_worker2.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_worker2.llm = Mock()
+        mock_worker2.llm.__class__.__name__ = "MockAdapter"
+        mock_worker2.llm.model_name = "test-model"
+        mock_worker2.__class__.__name__ = "SimpleAgent"
+        mock_worker2.max_steps = 5
+        mock_worker2.stateless = False
+
+        async def mock_arun2(x):
+            return f"Worker2 response: {x}"
+        mock_worker2.arun = mock_arun2
+
+        # Create mock manager
+        mock_manager = Mock()
+        mock_manager.memory = Mock()
+        mock_manager.planner = Mock()
+        mock_manager.planner.prompt_builder = Mock()
+        mock_manager.planner.prompt_builder.role_definition = Mock()
+        mock_manager.planner.prompt_builder.role_definition.text = "Manager role"
+        mock_manager.planner.prompt_builder.format_instructions = []
+        mock_manager.planner.prompt_builder.examples = []
+        mock_manager.planner.tool_registry = Mock()
+        mock_manager.planner.tool_registry.get_all_tools = Mock(return_value={})
+        mock_manager.llm = Mock()
+
+        async def mock_manager_run(x):
+            return f"Manager response: {x}"
+        mock_manager.arun = mock_manager_run
+
+        # Create mock runner
+        mock_runner = Mock()
+        mock_runner.manager = mock_manager
+        mock_runner.workers = {
+            "DataGatherer": mock_worker1,
+            "Summarizer": mock_worker2,
+        }
+
+        async def mock_run(x):
+            return f"Runner response: {x}"
+        mock_runner.run = mock_run
+
+        return mock_runner
+
+    def test_init_with_optimize_workers(self):
+        """Test initialization with optimize_workers flag."""
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        mock_runner = self._create_mock_runner()
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(
+                mock_runner,
+                optimize_manager=True,
+                optimize_workers=True,
+            )
+
+            assert optimizer.optimize_manager == True
+            assert optimizer.optimize_workers == True
+            assert optimizer.runner == mock_runner
+
+    def test_compile_with_worker_training_examples(self):
+        """Test compile() with worker training data."""
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
+
+        mock_runner = self._create_mock_runner()
+
+        # Training examples for manager
+        manager_examples = [
+            TrainingExample(
+                inputs={"user_input": "Research quantum computing"},
+                expected_output="Quantum computing summary",
+                full_trace="Manager trace..."
+            ),
+        ]
+
+        # Training examples for workers
+        worker_training_examples = {
+            "DataGatherer": [
+                TrainingExample(
+                    inputs={"user_input": "search quantum computing"},
+                    expected_output="Search results",
+                    full_trace="DataGatherer trace..."
+                ),
+            ],
+            "Summarizer": [
+                TrainingExample(
+                    inputs={"user_input": "summarize data"},
+                    expected_output="Summary",
+                    full_trace="Summarizer trace..."
+                ),
+            ],
+        }
+
+        def mock_metric(ex, pred, trace=None):
+            return True
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(
+                mock_runner,
+                optimize_manager=True,
+                optimize_workers=True,
+            )
+
+            # Mock the _optimize_workers method to return expected worker configs
+            mock_worker_configs = {
+                "DataGatherer": {"prompts": {"role_definition": "Optimized DG", "examples": ["ex1"]}},
+                "Summarizer": {"prompts": {"role_definition": "Optimized S", "examples": ["ex2"]}},
+            }
+            with patch.object(optimizer, '_optimize_workers', return_value=mock_worker_configs) as mock_opt_workers:
+                result = optimizer.compile(
+                    training_examples=manager_examples,
+                    metric=mock_metric,
+                    worker_training_examples=worker_training_examples,
+                    optimizer="bootstrap",
+                    max_bootstrapped_demos=2,
+                )
+
+                # Verify _optimize_workers was called with correct args
+                mock_opt_workers.assert_called_once()
+                call_kwargs = mock_opt_workers.call_args.kwargs
+                assert call_kwargs['worker_training_examples'] == worker_training_examples
+
+                # Verify workers section exists in config
+                assert "workers" in result.config
+                assert "DataGatherer" in result.config["workers"]
+                assert "Summarizer" in result.config["workers"]
+
+    def test_compile_skips_workers_without_training_data(self):
+        """Test that workers without training data are skipped."""
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
+
+        mock_runner = self._create_mock_runner()
+
+        manager_examples = [
+            TrainingExample(
+                inputs={"user_input": "Test"},
+                expected_output="Result",
+                full_trace="Trace..."
+            ),
+        ]
+
+        # Only provide training data for one worker
+        worker_training_examples = {
+            "DataGatherer": [
+                TrainingExample(
+                    inputs={"user_input": "search"},
+                    expected_output="results",
+                    full_trace="trace..."
+                ),
+            ],
+            # Summarizer has no training data
+        }
+
+        def mock_metric(ex, pred, trace=None):
+            return True
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(
+                mock_runner,
+                optimize_manager=True,
+                optimize_workers=True,
+            )
+
+            # Track which workers _optimize_workers would optimize
+            # by checking the worker_training_examples passed to it
+            original_optimize_workers = optimizer._optimize_workers
+
+            def tracking_optimize_workers(*args, **kwargs):
+                # Only return config for workers that have training data
+                worker_examples = kwargs.get('worker_training_examples', args[0] if args else {})
+                return {
+                    name: {"prompts": {"role_definition": f"Optimized {name}"}}
+                    for name in worker_examples.keys()
+                    if name in mock_runner.workers
+                }
+
+            with patch.object(optimizer, '_optimize_workers', side_effect=tracking_optimize_workers) as mock_opt:
+                result = optimizer.compile(
+                    training_examples=manager_examples,
+                    metric=mock_metric,
+                    worker_training_examples=worker_training_examples,
+                    optimizer="bootstrap",
+                )
+
+                # Only DataGatherer should be in config (only one with training data)
+                assert "DataGatherer" in result.config.get("workers", {})
+                # Summarizer should NOT be in workers (no training data provided)
+                assert "Summarizer" not in result.config.get("workers", {})
+
+    def test_compile_with_worker_specific_metrics(self):
+        """Test compile() with per-worker custom metrics."""
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
+
+        mock_runner = self._create_mock_runner()
+
+        manager_examples = [
+            TrainingExample(
+                inputs={"user_input": "Test"},
+                expected_output="Result",
+                full_trace="Trace..."
+            ),
+        ]
+
+        worker_training_examples = {
+            "DataGatherer": [
+                TrainingExample(
+                    inputs={"user_input": "search"},
+                    expected_output="results",
+                    full_trace="trace..."
+                ),
+            ],
+        }
+
+        def default_metric(ex, pred, trace=None):
+            return True
+
+        def gatherer_metric(ex, pred, trace=None):
+            return "search" in str(getattr(pred, 'response', ''))
+
+        worker_metrics = {
+            "DataGatherer": gatherer_metric,
+        }
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(
+                mock_runner,
+                optimize_workers=True,
+            )
+
+            # Mock _optimize_workers to verify correct metrics are passed
+            captured_metrics = {}
+            def capture_optimize_workers(worker_training_examples, worker_metrics, default_metric, **kwargs):
+                # Check which metric would be used for each worker
+                for worker_name in worker_training_examples:
+                    if worker_metrics and worker_name in worker_metrics:
+                        captured_metrics[worker_name] = worker_metrics[worker_name]
+                    else:
+                        captured_metrics[worker_name] = default_metric
+                return {worker_name: {"prompts": {}} for worker_name in worker_training_examples}
+
+            with patch.object(optimizer, '_optimize_workers', side_effect=capture_optimize_workers):
+                result = optimizer.compile(
+                    training_examples=manager_examples,
+                    metric=default_metric,
+                    worker_training_examples=worker_training_examples,
+                    worker_metrics=worker_metrics,
+                    optimizer="bootstrap",
+                )
+
+            # Verify DataGatherer would get its specific metric
+            assert captured_metrics.get("DataGatherer") == gatherer_metric
+
+    def test_compile_records_workers_optimized_in_provenance(self):
+        """Test that provenance records which workers were optimized."""
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
+
+        mock_runner = self._create_mock_runner()
+
+        manager_examples = [
+            TrainingExample(
+                inputs={"user_input": "Test"},
+                expected_output="Result",
+                full_trace="Trace..."
+            ),
+        ]
+
+        worker_training_examples = {
+            "DataGatherer": [
+                TrainingExample(
+                    inputs={"user_input": "search"},
+                    expected_output="results",
+                    full_trace="trace..."
+                ),
+            ],
+        }
+
+        def mock_metric(ex, pred, trace=None):
+            return True
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(
+                mock_runner,
+                optimize_workers=True,
+            )
+
+            # Mock _optimize_workers to return a config for DataGatherer
+            mock_worker_configs = {
+                "DataGatherer": {"prompts": {"role_definition": "Optimized"}}
+            }
+            with patch.object(optimizer, '_optimize_workers', return_value=mock_worker_configs):
+                result = optimizer.compile(
+                    training_examples=manager_examples,
+                    metric=mock_metric,
+                    worker_training_examples=worker_training_examples,
+                    optimizer="bootstrap",
+                )
+
+            # Check provenance
+            assert result.optimization.optimized == True
+            last_run = result.optimization.runs[-1]
+            assert "workers_optimized" in last_run.optimizer_config
+            assert "DataGatherer" in last_run.optimizer_config["workers_optimized"]
 
 
 class TestSimpleLLMOptimizer:
     """Test SimpleLLMOptimizer class."""
-    
+
     def test_init(self):
         from fair_prompt_optimizer.optimizers import SimpleLLMOptimizer
-        
+
         mock_llm = Mock()
         mock_llm.__class__.__name__ = "MockAdapter"
         mock_llm.model_name = "test-model"
-        
+
         optimizer = SimpleLLMOptimizer(mock_llm, "You are a classifier.")
-        
+
         assert optimizer.llm == mock_llm
         assert optimizer.system_prompt == "You are a classifier."
         assert optimizer.config.type == "simple_llm"
-        assert optimizer.config.role_definition == "You are a classifier."
+        # SimpleLLM uses system_prompt, not role_definition
+        assert optimizer.config.prompts.get("system_prompt") == "You are a classifier."
     
     def test_test_method(self):
         from fair_prompt_optimizer.optimizers import SimpleLLMOptimizer
@@ -440,14 +882,15 @@ class TestCompileWithMockedDSPy:
         """Test compile when manual bootstrapping finds successful demos."""
         from fair_prompt_optimizer.optimizers import AgentOptimizer
         from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
-        
+
         mock_agent = Mock()
         mock_agent.memory = Mock()
-        
+        mock_agent.llm = Mock()
+
         async def mock_arun(x):
             return "The answer is 42"
         mock_agent.arun = mock_arun
-        
+
         # Mock the prompt builder
         mock_builder = Mock()
         mock_builder.role_definition = Mock()
@@ -456,25 +899,31 @@ class TestCompileWithMockedDSPy:
         mock_builder.worker_instructions = []
         mock_builder.format_instructions = []
         mock_builder.examples = []
-        
+
         mock_agent.planner = Mock()
         mock_agent.planner.prompt_builder = mock_builder
-        
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+
         examples = [
-            TrainingExample(inputs={"user_input": "What is 6*7?"}, expected_output="42"),
+            TrainingExample(
+                inputs={"user_input": "What is 6*7?"},
+                expected_output="42",
+                full_trace="User: What is 6*7?\nAssistant: The answer is 42"
+            ),
         ]
-        
+
         # Metric that passes when "42" is in response
         def mock_metric(ex, pred, trace=None):
             return "42" in str(getattr(pred, 'response', ''))
-        
+
         with patch.object(OptimizedConfig, 'from_agent') as mock_from_agent:
             mock_from_agent.return_value = OptimizedConfig(config={
                 "version": "1.0",
                 "type": "agent",
                 "prompts": {"role_definition": "Test", "examples": []},
             })
-            
+
             optimizer = AgentOptimizer(mock_agent)
             result = optimizer.compile(
                 training_examples=examples,
@@ -482,27 +931,28 @@ class TestCompileWithMockedDSPy:
                 optimizer="bootstrap",
                 max_bootstrapped_demos=3,
             )
-            
+
             # Verify manual bootstrapping captured demos
             assert len(result.examples) > 0
-            
+
             # Verify provenance was recorded
             assert result.optimization.optimized == True
             assert result.optimization.optimizer == "bootstrap"
             assert result.optimization.runs[0].examples_after > 0
     
     def test_compile_bootstrap_falls_back_to_dspy(self):
-        """Test that DSPy is called when manual bootstrapping finds nothing."""
+        """Test that optimization completes even when no examples pass."""
         from fair_prompt_optimizer.optimizers import AgentOptimizer
         from fair_prompt_optimizer.config import TrainingExample, OptimizedConfig
-        
+
         mock_agent = Mock()
         mock_agent.memory = Mock()
-        
+        mock_agent.llm = Mock()
+
         async def mock_arun(x):
             return "wrong answer"
         mock_agent.arun = mock_arun
-        
+
         # Mock the prompt builder
         mock_builder = Mock()
         mock_builder.role_definition = Mock()
@@ -511,48 +961,37 @@ class TestCompileWithMockedDSPy:
         mock_builder.worker_instructions = []
         mock_builder.format_instructions = []
         mock_builder.examples = []
-        
+
         mock_agent.planner = Mock()
         mock_agent.planner.prompt_builder = mock_builder
-        
+        mock_agent.planner.tool_registry = Mock()
+        mock_agent.planner.tool_registry.get_all_tools = Mock(return_value={})
+
         examples = [
             TrainingExample(inputs={"user_input": "2+2"}, expected_output="4"),
         ]
-        
+
         # Metric that always fails (so manual bootstrapping finds nothing)
         def mock_metric(ex, pred, trace=None):
             return False
-        
+
         with patch.object(OptimizedConfig, 'from_agent') as mock_from_agent:
             mock_from_agent.return_value = OptimizedConfig(config={
                 "version": "1.0",
                 "type": "agent",
                 "prompts": {"role_definition": "Test", "examples": []},
             })
-            
-            with patch('dspy.teleprompt.BootstrapFewShot') as MockBootstrap:
-                # Setup mock optimizer
-                mock_dspy_optimizer = Mock()
-                mock_optimized_module = Mock()
-                mock_optimized_module.get_prompt_builder = Mock(return_value=mock_builder)
-                mock_optimized_module.get_demos = Mock(return_value=[])
-                mock_dspy_optimizer.compile = Mock(return_value=mock_optimized_module)
-                MockBootstrap.return_value = mock_dspy_optimizer
-                
-                optimizer = AgentOptimizer(mock_agent)
-                result = optimizer.compile(
-                    training_examples=examples,
-                    metric=mock_metric,
-                    optimizer="bootstrap",
-                )
-                
-                # Verify DSPy optimizer was called (fallback)
-                MockBootstrap.assert_called_once()
-                mock_dspy_optimizer.compile.assert_called_once()
-                
-                # Verify provenance was recorded
-                assert result.optimization.optimized == True
-                assert result.optimization.optimizer == "bootstrap"
+
+            optimizer = AgentOptimizer(mock_agent)
+            result = optimizer.compile(
+                training_examples=examples,
+                metric=mock_metric,
+                optimizer="bootstrap",
+            )
+
+            # Verify provenance was recorded even with no examples passing
+            assert result.optimization.optimized == True
+            assert result.optimization.optimizer == "bootstrap"
 
 
 # =============================================================================

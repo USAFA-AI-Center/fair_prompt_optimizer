@@ -1,0 +1,22 @@
+[
+  {
+    "inputs": {"user_input": "Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems."},
+    "expected_output": "Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.",
+    "full_trace": "# --- Example: Summarization ---\n\"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n\n{\n    \"thought\": \"I need to synthesize this raw research data into a clear, concise summary. The data mentions hardware advances, error correction, and algorithms. I will organize these into coherent themes.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock."},
+    "expected_output": "Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.",
+    "full_trace": "# --- Example: Summarization ---\n\"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n\n{\n    \"thought\": \"I need to synthesize this research data about climate change impacts on agriculture. I should highlight the main themes and their implications.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Benefits: faster diagnosis, personalized medicine, drug discovery. Risks: data privacy, bias in algorithms, liability issues, job displacement concerns."},
+    "expected_output": "AI in healthcare offers benefits like improved diagnostics and personalized treatment, but carries risks including data privacy concerns and potential for algorithmic bias.",
+    "full_trace": "# --- Example: Summarization ---\n\"Benefits: faster diagnosis, personalized medicine, drug discovery. Risks: data privacy, bias in algorithms, liability issues, job displacement concerns.\"\n\n{\n    \"thought\": \"I need to synthesize this data about AI in healthcare. I should balance the presentation of benefits and risks in a coherent narrative.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"AI in healthcare offers benefits like improved diagnostics and personalized treatment, but carries risks including data privacy concerns and potential for algorithmic bias.\"\n    }\n}"
+  },
+  {
+    "inputs": {"user_input": "Global renewable capacity grew 50% in 2023. Solar installations doubled. Wind power expanded significantly. Battery storage costs dropped 70%."},
+    "expected_output": "The renewable energy sector experienced unprecedented growth, with solar leading the expansion while declining battery costs enable better grid integration.",
+    "full_trace": "# --- Example: Summarization ---\n\"Global renewable capacity grew 50% in 2023. Solar installations doubled. Wind power expanded significantly. Battery storage costs dropped 70%.\"\n\n{\n    \"thought\": \"I need to synthesize these statistics about renewable energy into a meaningful summary that captures the overall trend and key highlights.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"The renewable energy sector experienced unprecedented growth, with solar leading the expansion while declining battery costs enable better grid integration.\"\n    }\n}"
+  }
+]

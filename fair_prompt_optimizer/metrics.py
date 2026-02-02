@@ -62,6 +62,53 @@ def json_format_compliance(example, prediction, trace=None) -> bool:
     
     return True
 
+# Custom metric for research quality
+def research_quality_metric(example, prediction, trace=None) -> float:
+    """
+    Evaluate research output quality.
+    
+    Checks for:
+    - Presence of substantive content (not just errors)
+    - Mentions of sources/data
+    - Coherent structure
+    
+    Returns:
+        1.0 - High quality research output
+        0.5 - Partial/incomplete output
+        0.0 - Failed or empty output
+    """
+    response = str(prediction.response).lower() if hasattr(prediction, 'response') else ""
+    
+    # Check for failure indicators
+    if not response or "error" in response or len(response) < 50:
+        return 0.0
+    
+    score = 0.0
+    
+    # Has substantive content
+    if len(response) > 200:
+        score += 0.3
+    
+    # Mentions sources or data
+    source_indicators = ["according to", "research", "found", "shows", "indicates", "source", "study"]
+    if any(indicator in response for indicator in source_indicators):
+        score += 0.3
+    
+    # Has structure (multiple points/sentences)
+    if response.count(". ") >= 2:
+        score += 0.2
+    
+    # Addresses the query topic (check if expected_output keywords appear)
+    expected = str(example.expected_output).lower() if hasattr(example, 'expected_output') else ""
+    if expected:
+        expected_keywords = [w for w in expected.split() if len(w) > 4][:5]
+        matches = sum(1 for kw in expected_keywords if kw in response)
+        score += 0.2 * (matches / max(len(expected_keywords), 1))
+    else:
+        score += 0.2  # No expected output to compare, give benefit of doubt
+    
+    return min(score, 1.0)
+
 
 def numeric_accuracy_with_format(example, prediction, trace=None, tolerance: float = 0.00) -> float:
     """

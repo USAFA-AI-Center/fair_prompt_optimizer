@@ -97,5 +97,7 @@ from .metrics import (
     keyword_match,
     combined_metric,
     create_metric,
-    sentiment_format_metric
+    sentiment_format_metric,
+    research_quality_metric,
+    json_format_compliance
 )
