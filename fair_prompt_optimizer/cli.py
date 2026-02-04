@@ -8,12 +8,271 @@ Usage:
     fair-optimize test -c CONFIG [-i INPUT]
     fair-optimize info -c CONFIG
     fair-optimize compare CONFIG1 CONFIG2
+    fair-optimize validate -c CONFIG [-t TRAINING]
 """
 
 import argparse
 import json
 import sys
+import time
+import threading
+from contextlib import nullcontext
 from pathlib import Path
+from typing import Optional, List, Tuple
+
+
+# =============================================================================
+# Terminal Output Helpers
+# =============================================================================
+
+class Colors:
+    """ANSI color codes for terminal output."""
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    MAGENTA = '\033[95m'
+    CYAN = '\033[96m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RESET = '\033[0m'
+
+    @classmethod
+    def disable(cls):
+        """Disable colors (for non-TTY output)."""
+        cls.RED = cls.GREEN = cls.YELLOW = cls.BLUE = ''
+        cls.MAGENTA = cls.CYAN = cls.BOLD = cls.DIM = cls.RESET = ''
+
+
+# Disable colors if not a TTY
+if not sys.stdout.isatty():
+    Colors.disable()
+
+
+def print_error(msg: str, suggestion: str = None):
+    """Print an error message with optional suggestion."""
+    print(f"{Colors.RED}{Colors.BOLD}Error:{Colors.RESET} {msg}", file=sys.stderr)
+    if suggestion:
+        print(f"{Colors.DIM}  Suggestion: {suggestion}{Colors.RESET}", file=sys.stderr)
+
+
+def print_warning(msg: str):
+    """Print a warning message."""
+    print(f"{Colors.YELLOW}Warning:{Colors.RESET} {msg}", file=sys.stderr)
+
+
+def print_success(msg: str):
+    """Print a success message."""
+    print(f"{Colors.GREEN}✓{Colors.RESET} {msg}")
+
+
+def print_info(msg: str):
+    """Print an info message."""
+    print(f"{Colors.BLUE}ℹ{Colors.RESET} {msg}")
+
+
+def print_step(step: int, total: int, msg: str):
+    """Print a step progress message."""
+    print(f"{Colors.CYAN}[{step}/{total}]{Colors.RESET} {msg}")
+
+
+class Spinner:
+    """Simple terminal spinner for long-running operations."""
+
+    FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+    def __init__(self, message: str = "Working..."):
+        self.message = message
+        self.running = False
+        self.thread = None
+        self.frame_idx = 0
+
+    def _spin(self):
+        while self.running:
+            frame = self.FRAMES[self.frame_idx % len(self.FRAMES)]
+            sys.stdout.write(f"\r{Colors.CYAN}{frame}{Colors.RESET} {self.message}")
+            sys.stdout.flush()
+            self.frame_idx += 1
+            time.sleep(0.1)
+
+    def start(self):
+        if sys.stdout.isatty():
+            self.running = True
+            self.thread = threading.Thread(target=self._spin, daemon=True)
+            self.thread.start()
+        else:
+            print(f"  {self.message}")
+
+    def stop(self, success: bool = True, final_message: str = None):
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=0.2)
+        if sys.stdout.isatty():
+            # Clear the spinner line
+            sys.stdout.write('\r' + ' ' * (len(self.message) + 10) + '\r')
+            sys.stdout.flush()
+        if final_message:
+            if success:
+                print_success(final_message)
+            else:
+                print_error(final_message)
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args):
+        self.stop()
+
+
+# =============================================================================
+# Validation Functions
+# =============================================================================
+
+def validate_config(config_path: str) -> Tuple[bool, List[str], List[str]]:
+    """
+    Validate a config file.
+
+    Returns:
+        (is_valid, errors, warnings)
+    """
+    errors = []
+    warnings = []
+
+    # Check file exists
+    if not Path(config_path).exists():
+        return False, [f"Config file not found: {config_path}"], []
+
+    # Try to load JSON
+    try:
+        with open(config_path) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON in config: {e}"], []
+
+    # Check required fields
+    if "type" not in data:
+        warnings.append("Missing 'type' field - defaulting to 'agent'")
+
+    config_type = data.get("type", "agent")
+
+    # Check prompts
+    prompts = data.get("prompts", {})
+    if not prompts:
+        if config_type != "multi_agent":
+            errors.append("Missing 'prompts' section")
+    else:
+        role_def = prompts.get("role_definition", prompts.get("system_prompt", ""))
+        if not role_def or role_def.startswith("# TODO"):
+            warnings.append("Role definition appears to be a placeholder - please customize")
+
+    # Check model
+    model = data.get("model", {})
+    if not model:
+        if config_type != "multi_agent":
+            errors.append("Missing 'model' section")
+    else:
+        model_name = model.get("model_name", "")
+        if not model_name or model_name.startswith("# TODO"):
+            errors.append("Model name is missing or a placeholder")
+
+        adapter = model.get("adapter", "")
+        valid_adapters = ["HuggingFaceAdapter", "OpenAIAdapter", "OllamaAdapter"]
+        if adapter and adapter not in valid_adapters:
+            errors.append(f"Unknown adapter '{adapter}'. Valid: {valid_adapters}")
+
+    # Check agent section for agent type
+    if config_type == "agent":
+        agent = data.get("agent", {})
+        if not agent:
+            warnings.append("Missing 'agent' section - using defaults")
+        else:
+            tools = agent.get("tools", [])
+            if tools and any(str(t).startswith("# TODO") for t in tools):
+                warnings.append("Tools list contains placeholders")
+
+    # Check multi-agent specific
+    if config_type == "multi_agent":
+        if "manager" not in data:
+            errors.append("Multi-agent config missing 'manager' section")
+        if "workers" not in data:
+            errors.append("Multi-agent config missing 'workers' section")
+
+    is_valid = len(errors) == 0
+    return is_valid, errors, warnings
+
+
+def validate_training_examples(training_path: str) -> Tuple[bool, List[str], List[str]]:
+    """
+    Validate training examples file.
+
+    Returns:
+        (is_valid, errors, warnings)
+    """
+    errors = []
+    warnings = []
+
+    # Check file exists
+    if not Path(training_path).exists():
+        return False, [f"Training file not found: {training_path}"], []
+
+    # Try to load JSON
+    try:
+        with open(training_path) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON in training file: {e}"], []
+
+    # Should be a list
+    if not isinstance(data, list):
+        return False, ["Training data must be a JSON array of examples"], []
+
+    if len(data) == 0:
+        return False, ["Training data is empty - need at least 1 example"], []
+
+    # Check each example
+    placeholder_count = 0
+    missing_inputs = 0
+    missing_outputs = 0
+    has_full_trace = 0
+
+    for i, example in enumerate(data):
+        if not isinstance(example, dict):
+            errors.append(f"Example {i+1}: Must be a JSON object")
+            continue
+
+        inputs = example.get("inputs", {})
+        if not inputs:
+            missing_inputs += 1
+        elif not inputs.get("user_input"):
+            missing_inputs += 1
+
+        output = example.get("expected_output", "")
+        if not output:
+            missing_outputs += 1
+        elif str(output).startswith("# TODO"):
+            placeholder_count += 1
+
+        if example.get("full_trace"):
+            has_full_trace += 1
+
+    if missing_inputs > 0:
+        errors.append(f"{missing_inputs} example(s) missing 'inputs.user_input'")
+
+    if missing_outputs > 0:
+        errors.append(f"{missing_outputs} example(s) missing 'expected_output'")
+
+    if placeholder_count > 0:
+        warnings.append(f"{placeholder_count} example(s) have placeholder outputs (# TODO)")
+
+    if has_full_trace > 0 and has_full_trace < len(data):
+        warnings.append(f"Only {has_full_trace}/{len(data)} examples have full_trace - consider adding to all")
+
+    if len(data) < 5:
+        warnings.append(f"Only {len(data)} examples - recommend 10-50 for better optimization")
+
+    is_valid = len(errors) == 0
+    return is_valid, errors, warnings
 
 
 def main():
@@ -21,8 +280,23 @@ def main():
     parser = argparse.ArgumentParser(
         prog="fair-optimize",
         description="FAIR Prompt Optimizer - DSPy-powered optimization for FAIR-LLM agents",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  fair-optimize init --type agent
+  fair-optimize validate -c config.json -t examples.json
+  fair-optimize optimize -c config.json -t examples.json --metric contains_answer
+  fair-optimize test -c config_optimized.json -i "What is 2+2?"
+  fair-optimize info -c config_optimized.json
+        """
     )
-    
+
+    parser.add_argument(
+        "--version", "-V",
+        action="version",
+        version="%(prog)s 0.1.0"
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
     # --- init command ---
@@ -64,7 +338,11 @@ def main():
     )
     opt_parser.add_argument(
         "--metric",
-        choices=["exact_match", "contains_answer", "numeric_accuracy", "fuzzy_match"],
+        choices=[
+            "exact_match", "contains_answer", "numeric_accuracy", "fuzzy_match",
+            "json_format_compliance", "format_compliance_score", "numeric_accuracy_with_format",
+            "sentiment_format_metric", "research_quality_metric"
+        ],
         default="contains_answer",
         help="Evaluation metric (default: contains_answer)"
     )
@@ -95,6 +373,16 @@ def main():
         choices=["light", "medium", "heavy"],
         default="light",
         help="MIPROv2 intensity (default: light)"
+    )
+    opt_parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress progress output"
+    )
+    opt_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate inputs without running optimization"
     )
     
     # --- test command ---
@@ -151,14 +439,27 @@ def main():
         default=5,
         help="Number of example templates to create"
     )
-    
+
+    # --- validate command ---
+    validate_parser = subparsers.add_parser("validate", help="Validate config and training data")
+    validate_parser.add_argument(
+        "--config", "-c",
+        required=True,
+        help="Path to config JSON"
+    )
+    validate_parser.add_argument(
+        "--training", "-t",
+        default=None,
+        help="Path to training examples JSON (optional)"
+    )
+
     # Parse arguments
     args = parser.parse_args()
-    
+
     if args.command is None:
         parser.print_help()
         sys.exit(1)
-    
+
     # Dispatch to command handlers
     try:
         if args.command == "init":
@@ -173,11 +474,19 @@ def main():
             cmd_compare(args)
         elif args.command == "examples":
             cmd_examples(args)
+        elif args.command == "validate":
+            cmd_validate(args)
     except KeyboardInterrupt:
-        print("\nInterrupted.")
+        print("\n" + Colors.YELLOW + "Interrupted." + Colors.RESET)
+        sys.exit(1)
+    except FileNotFoundError as e:
+        print_error(str(e), "Check the file path and try again")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print_error(f"Invalid JSON: {e}", "Check your JSON syntax")
         sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print_error(str(e))
         sys.exit(1)
 
 
@@ -187,27 +496,36 @@ def main():
 
 def cmd_init(args):
     """Create a new config file from template."""
-    
+
     output_path = args.output or f"{args.type}_config.json"
-    
+
+    # Check if file already exists
+    if Path(output_path).exists():
+        print_warning(f"File already exists: {output_path}")
+        response = input("Overwrite? [y/N] ").strip().lower()
+        if response != 'y':
+            print("Aborted.")
+            return
+
     if args.type == "simple_llm":
         config = create_simple_llm_template()
     elif args.type == "agent":
         config = create_agent_template()
     elif args.type == "multi_agent":
         config = create_multi_agent_template()
-    
+
     # Save
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, 'w') as f:
         json.dump(config, f, indent=2)
-    
-    print(f"Created {args.type} config: {output_path}")
+
+    print_success(f"Created {args.type} config: {output_path}")
     print()
-    print("Next steps:")
-    print(f"  1. Edit {output_path} to configure your agent")
-    print(f"  2. Create training examples: fair-optimize examples -o examples.json")
-    print(f"  3. Optimize: fair-optimize optimize -c {output_path} -t examples.json")
+    print(f"{Colors.BOLD}Next steps:{Colors.RESET}")
+    print(f"  1. Edit {Colors.CYAN}{output_path}{Colors.RESET} to configure your agent")
+    print(f"  2. Create training examples: {Colors.DIM}fair-optimize examples -o examples.json{Colors.RESET}")
+    print(f"  3. Validate: {Colors.DIM}fair-optimize validate -c {output_path} -t examples.json{Colors.RESET}")
+    print(f"  4. Optimize: {Colors.DIM}fair-optimize optimize -c {output_path} -t examples.json{Colors.RESET}")
 
 
 def create_simple_llm_template() -> dict:
@@ -340,9 +658,43 @@ def create_multi_agent_template() -> dict:
 
 def cmd_optimize(args):
     """Run optimization on an agent."""
+    quiet = getattr(args, 'quiet', False)
+
+    # === Step 1: Validate inputs ===
+    if not quiet:
+        print_step(1, 5, "Validating inputs...")
+
+    # Validate config
+    config_valid, config_errors, config_warnings = validate_config(args.config)
+    if not config_valid:
+        for err in config_errors:
+            print_error(err)
+        sys.exit(1)
+    for warn in config_warnings:
+        if not quiet:
+            print_warning(warn)
+
+    # Validate training data
+    training_valid, training_errors, training_warnings = validate_training_examples(args.training)
+    if not training_valid:
+        for err in training_errors:
+            print_error(err)
+        sys.exit(1)
+    for warn in training_warnings:
+        if not quiet:
+            print_warning(warn)
+
+    if not quiet:
+        print_success("Inputs validated")
+
+    # Dry run mode - stop here
+    if getattr(args, 'dry_run', False):
+        print_info("Dry run complete - inputs are valid")
+        return
+
     import nest_asyncio
     nest_asyncio.apply()
-    
+
     from .config import (
         load_optimized_config,
         load_training_examples,
@@ -351,47 +703,55 @@ def cmd_optimize(args):
     )
     from .optimizers import AgentOptimizer, MultiAgentOptimizer, SimpleLLMOptimizer
     from . import metrics as metrics_module
-    
-    # Load config
-    print(f"Loading config: {args.config}")
+
+    # === Step 2: Load config ===
+    if not quiet:
+        print_step(2, 5, f"Loading config: {args.config}")
     config = load_optimized_config(args.config)
     config_type = config.type
-    
+
     # Load training examples
-    print(f"Loading training examples: {args.training}")
     examples = load_training_examples(args.training)
-    print(f"  Found {len(examples)} examples")
-    
-    # Create LLM
-    llm = create_llm(
-        config.config.get("model", {}),
-        model_override=args.model,
-        adapter_override=args.adapter,
-    )
-    
+    if not quiet:
+        print_success(f"Loaded {len(examples)} training examples")
+
+    # === Step 3: Initialize LLM ===
+    if not quiet:
+        print_step(3, 5, "Initializing LLM...")
+
+    with Spinner("Loading model...") if not quiet else nullcontext():
+        llm = create_llm(
+            config.config.get("model", {}),
+            model_override=args.model,
+            adapter_override=args.adapter,
+        )
+
+    if not quiet:
+        model_name = args.model or config.config.get("model", {}).get("model_name", "unknown")
+        print_success(f"LLM initialized: {model_name}")
+
     # Get metric function
     metric = getattr(metrics_module, args.metric)
-    print(f"Using metric: {args.metric}")
-    
-    # Create optimizer based on type
-    print(f"Config type: {config_type}")
-    
+
+    # === Step 4: Create optimizer ===
+    if not quiet:
+        print_step(4, 5, f"Creating {config_type} optimizer...")
+
     if config_type == "simple_llm":
         system_prompt = config.prompts.get("role_definition", "You are a helpful assistant.")
         optimizer = SimpleLLMOptimizer(llm, system_prompt)
-        # Transfer existing config
         optimizer.config = config
-        
+
     elif config_type == "multi_agent":
         from fairlib.utils.config_manager import load_multi_agent
         runner = load_multi_agent(args.config, llm)
         optimizer = MultiAgentOptimizer(runner, config=config)
-        
+
     else:  # agent
         from fairlib.utils.config_manager import load_agent
         agent = load_agent(args.config, llm)
         optimizer = AgentOptimizer(agent, config=config)
-    
+
     # Setup MIPROv2 if needed
     dspy_lm = None
     if args.optimizer == "mipro":
@@ -399,47 +759,123 @@ def cmd_optimize(args):
             import dspy
             dspy_lm = dspy.LM(args.mipro_lm)
         else:
-            print("Warning: MIPROv2 works best with --mipro-lm specified")
+            print_warning("MIPROv2 works best with --mipro-lm specified")
+
+    # === Step 5: Run optimization ===
+    if not quiet:
+        print_step(5, 5, f"Running {args.optimizer} optimization...")
+        print()
+        print(f"  {Colors.DIM}Metric: {args.metric}{Colors.RESET}")
+        print(f"  {Colors.DIM}Max demos: {args.max_demos}{Colors.RESET}")
+        if args.optimizer == "mipro":
+            print(f"  {Colors.DIM}MIPROv2 intensity: {args.mipro_auto}{Colors.RESET}")
+        print()
     
-    # Run optimization
-    print()
-    print(f"Running {args.optimizer} optimization...")
-    print(f"  Max demos: {args.max_demos}")
-    if args.optimizer == "mipro":
-        print(f"  MIPROv2 auto: {args.mipro_auto}")
-    print()
-    
-    result = optimizer.compile(
-        training_examples=examples,
-        metric=metric,
-        optimizer=args.optimizer,
-        max_bootstrapped_demos=args.max_demos,
-        max_labeled_demos=args.max_demos,
-        training_data_path=args.training,
-        dspy_lm=dspy_lm,
-        mipro_auto=args.mipro_auto,
-    )
-    
+    with Spinner("Optimizing prompts...") if not quiet else nullcontext():
+        result = optimizer.compile(
+            training_examples=examples,
+            metric=metric,
+            optimizer=args.optimizer,
+            max_bootstrapped_demos=args.max_demos,
+            max_labeled_demos=args.max_demos,
+            training_data_path=args.training,
+            dspy_lm=dspy_lm,
+            mipro_auto=args.mipro_auto,
+        )
+
     # Determine output path
     output_path = args.output
     if output_path is None:
         base = Path(args.config).stem
         output_path = f"{base}_optimized.json"
-    
+
     # Save
     save_optimized_config(result, output_path)
-    
+
+    # Summary
+    if not quiet:
+        print()
+        print(f"{Colors.GREEN}{Colors.BOLD}{'=' * 60}{Colors.RESET}")
+        print(f"{Colors.GREEN}{Colors.BOLD}  OPTIMIZATION COMPLETE{Colors.RESET}")
+        print(f"{Colors.GREEN}{Colors.BOLD}{'=' * 60}{Colors.RESET}")
+        print()
+        print(f"  Output: {Colors.CYAN}{output_path}{Colors.RESET}")
+        print(f"  Examples generated: {Colors.BOLD}{len(result.examples)}{Colors.RESET}")
+        print(f"  Optimization runs: {len(result.optimization.runs)}")
+        print()
+        print(f"{Colors.BOLD}Next steps:{Colors.RESET}")
+        print(f"  Test: {Colors.DIM}fair-optimize test -c {output_path}{Colors.RESET}")
+        print(f"  Info: {Colors.DIM}fair-optimize info -c {output_path}{Colors.RESET}")
+    else:
+        print(output_path)  # Just output the path in quiet mode
+
+
+# =============================================================================
+# Command: validate
+# =============================================================================
+
+def cmd_validate(args):
+    """Validate config and training data without running optimization."""
     print()
-    print("=" * 60)
-    print("OPTIMIZATION COMPLETE")
-    print("=" * 60)
-    print(f"Output saved to: {output_path}")
-    print(f"Examples generated: {len(result.examples)}")
-    print(f"Optimization runs: {len(result.optimization.runs)}")
+    print(f"{Colors.BOLD}Validating files...{Colors.RESET}")
     print()
-    print("Next steps:")
-    print(f"  Test: fair-optimize test -c {output_path}")
-    print(f"  Info: fair-optimize info -c {output_path}")
+
+    all_valid = True
+
+    # Validate config
+    print(f"Config: {args.config}")
+    config_valid, config_errors, config_warnings = validate_config(args.config)
+
+    if config_valid:
+        print_success("Config is valid")
+    else:
+        print_error("Config has errors")
+        all_valid = False
+
+    for err in config_errors:
+        print(f"  {Colors.RED}✗{Colors.RESET} {err}")
+    for warn in config_warnings:
+        print(f"  {Colors.YELLOW}!{Colors.RESET} {warn}")
+
+    # Validate training data if provided
+    if args.training:
+        print()
+        print(f"Training data: {args.training}")
+        training_valid, training_errors, training_warnings = validate_training_examples(args.training)
+
+        if training_valid:
+            print_success("Training data is valid")
+        else:
+            print_error("Training data has errors")
+            all_valid = False
+
+        for err in training_errors:
+            print(f"  {Colors.RED}✗{Colors.RESET} {err}")
+        for warn in training_warnings:
+            print(f"  {Colors.YELLOW}!{Colors.RESET} {warn}")
+
+        # Additional: count examples
+        try:
+            with open(args.training) as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                print_info(f"Total examples: {len(data)}")
+                with_trace = sum(1 for ex in data if ex.get('full_trace'))
+                if with_trace > 0:
+                    print_info(f"Examples with full_trace: {with_trace}")
+        except Exception:
+            pass
+
+    # Summary
+    print()
+    if all_valid:
+        print(f"{Colors.GREEN}{Colors.BOLD}All validations passed!{Colors.RESET}")
+        if args.training:
+            print(f"\nReady to optimize:")
+            print(f"  {Colors.DIM}fair-optimize optimize -c {args.config} -t {args.training}{Colors.RESET}")
+    else:
+        print(f"{Colors.RED}{Colors.BOLD}Validation failed - fix errors above{Colors.RESET}")
+        sys.exit(1)
 
 
 # =============================================================================
@@ -450,9 +886,9 @@ def cmd_test(args):
     """Test an agent interactively."""
     import nest_asyncio
     nest_asyncio.apply()
-    
+
     from .config import load_optimized_config
-    
+
     # Load config
     config = load_optimized_config(args.config)
     config_type = config.type
@@ -469,8 +905,9 @@ def cmd_test(args):
     # Create agent/optimizer for testing
     if config_type == "simple_llm":
         from .optimizers import SimpleLLMOptimizer
-        system_prompt = config.prompts.get("role_definition", "")
-        tester = SimpleLLMOptimizer(llm, system_prompt)
+        # Check both system_prompt and role_definition for backwards compatibility
+        system_prompt = config.prompts.get("system_prompt", config.prompts.get("role_definition", ""))
+        tester = SimpleLLMOptimizer(llm, system_prompt, config=config)
         
     elif config_type == "multi_agent":
         from fairlib.utils.config_manager import load_multi_agent

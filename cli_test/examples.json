@@ -1,0 +1,32 @@
+[
+  {
+    "inputs": {
+      "user_input": "# TODO: Example 1 input"
+    },
+    "expected_output": "# TODO: Example 1 expected output"
+  },
+  {
+    "inputs": {
+      "user_input": "# TODO: Example 2 input"
+    },
+    "expected_output": "# TODO: Example 2 expected output"
+  },
+  {
+    "inputs": {
+      "user_input": "# TODO: Example 3 input"
+    },
+    "expected_output": "# TODO: Example 3 expected output"
+  },
+  {
+    "inputs": {
+      "user_input": "# TODO: Example 4 input"
+    },
+    "expected_output": "# TODO: Example 4 expected output"
+  },
+  {
+    "inputs": {
+      "user_input": "# TODO: Example 5 input"
+    },
+    "expected_output": "# TODO: Example 5 expected output"
+  }
+]

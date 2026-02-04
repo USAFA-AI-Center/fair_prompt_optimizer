@@ -99,5 +99,7 @@ from .metrics import (
     create_metric,
     sentiment_format_metric,
     research_quality_metric,
-    json_format_compliance
+    json_format_compliance,
+    format_compliance_score,
+    numeric_accuracy_with_format,
 )

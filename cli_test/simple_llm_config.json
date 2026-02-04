@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "type": "simple_llm",
+  "prompts": {
+    "role_definition": "# TODO: Define your system prompt\n# Example: You are a helpful classifier. Always respond with: CATEGORY: [label]",
+    "tool_instructions": [],
+    "worker_instructions": [],
+    "format_instructions": [
+      "# TODO: Add format instructions if needed"
+    ],
+    "examples": []
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "# TODO: Set your model name (e.g., dolphin3-qwen25-3b)",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "planner_type": "None",
+    "tools": [],
+    "max_steps": 1,
+    "stateless": true
+  }
+}

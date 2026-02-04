@@ -1,0 +1,182 @@
+{
+  "version": "1.0",
+  "type": "multi_agent",
+  "manager": {
+    "version": "1.0",
+    "type": "agent",
+    "prompts": {
+      "role_definition": "You are a research team manager. Coordinate research tasks by delegating to DataGatherer for information collection, then Summarizer for synthesis.",
+      "tool_instructions": [],
+      "worker_instructions": [
+        {
+          "name": "DataGatherer",
+          "role_description": "Searches for relevant information. Input: search topic. Output: raw findings."
+        },
+        {
+          "name": "Summarizer",
+          "role_description": "Synthesizes raw data into clear summaries. Input: raw data. Output: concise summary."
+        }
+      ],
+      "format_instructions": [
+        "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\nDelegate tasks to workers using their names as tool_name.\n",
+        "# --- WORKFLOW ---\n1. Delegate to DataGatherer to gather information\n2. Delegate to Summarizer with the gathered data\n3. Provide the final answer using \"final_answer\""
+      ],
+      "examples": [
+        "# --- Example: Research Coordination ---\n\"What are the latest developments in quantum computing?\"\n\n{\n    \"thought\": \"I need to research the latest developments in quantum computing. I will first delegate to DataGatherer to search for recent news and articles.\",\n    \"action\": {\n        \"tool_name\": \"DataGatherer\",\n        \"tool_input\": \"latest quantum computing developments 2024\"\n    }\n}\n\nObservation: DataGatherer returned: \"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n\n{\n    \"thought\": \"I have gathered raw research data. Now I will delegate to Summarizer to synthesize this into a coherent summary.\",\n    \"action\": {\n        \"tool_name\": \"Summarizer\",\n        \"tool_input\": \"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n    }\n}\n\nObservation: Summarizer returned: \"Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.\"\n\n{\n    \"thought\": \"I have a well-synthesized summary from the Summarizer. I can now provide the final answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.\"\n    }\n}",
+        "# --- Example: Research Coordination ---\n\"Summarize the key findings about climate change effects on agriculture\"\n\n{\n    \"thought\": \"I need to research climate change effects on agriculture. I will delegate to DataGatherer first.\",\n    \"action\": {\n        \"tool_name\": \"DataGatherer\",\n        \"tool_input\": \"climate change effects agriculture research findings\"\n    }\n}\n\nObservation: DataGatherer returned: \"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n\n{\n    \"thought\": \"I have raw research data. Now I will delegate to Summarizer to create a coherent summary.\",\n    \"action\": {\n        \"tool_name\": \"Summarizer\",\n        \"tool_input\": \"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n    }\n}\n\nObservation: Summarizer returned: \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n\n{\n    \"thought\": \"The summary is complete. I will provide the final answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n    }\n}"
+      ]
+    },
+    "model": {
+      "adapter": "HuggingFaceAdapter",
+      "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+      "adapter_kwargs": {}
+    },
+    "agent": {
+      "agent_type": "SimpleAgent",
+      "planner_type": "ReActPlanner",
+      "tools": [],
+      "max_steps": 8,
+      "stateless": false
+    },
+    "metadata": {
+      "exported_at": "2026-02-04T18:55:44.845394",
+      "source": "fairlib.utils.config_manager"
+    }
+  },
+  "workers": {
+    "DataGatherer": {
+      "version": "1.0",
+      "type": "agent",
+      "prompts": {
+        "role_definition": "You are a research data gatherer. Find accurate, relevant information on the given topic.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\n",
+          "# --- FINAL ANSWER FORMAT ---\nUse tool_name \"final_answer\" with the gathered information as tool_input."
+        ],
+        "examples": [
+          "# --- Example: Web Search ---\n\"latest quantum computing developments 2024\"\n\n{\n    \"thought\": \"I need to search for recent developments in quantum computing. I will use the web searcher tool.\",\n    \"action\": {\n        \"tool_name\": \"web_searcher\",\n        \"tool_input\": \"quantum computing news 2024 breakthroughs\"\n    }\n}\n\nObservation: Search results: 1. IBM announces 1121-qubit processor. 2. Google achieves error correction milestone. 3. New quantum algorithms show promise for optimization.\n\n{\n    \"thought\": \"I found relevant information about recent quantum computing developments. I will compile and return the findings.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n    }\n}",
+          "# --- Example: Web Search ---\n\"climate change effects agriculture research findings\"\n\n{\n    \"thought\": \"I need to find research findings about how climate change affects agriculture. I will search for scientific studies and reports.\",\n    \"action\": {\n        \"tool_name\": \"web_searcher\",\n        \"tool_input\": \"climate change agriculture impact research study\"\n    }\n}\n\nObservation: Search results: 1. FAO report on rainfall changes affecting crops. 2. Study on increased pest pressure due to warming. 3. Research on shifted growing seasons. 4. Livestock heat stress findings.\n\n{\n    \"thought\": \"I found multiple relevant research findings. I will compile them into a comprehensive response.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n    }\n}"
+        ]
+      },
+      "model": {
+        "adapter": "HuggingFaceAdapter",
+        "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+        "adapter_kwargs": {}
+      },
+      "agent": {
+        "agent_type": "SimpleAgent",
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3,
+        "stateless": false
+      },
+      "metadata": {
+        "exported_at": "2026-02-04T18:55:49.804725",
+        "source": "fairlib.utils.config_manager"
+      },
+      "optimization": {
+        "runs": [
+          {
+            "timestamp": "2026-02-04T18:55:57.898103",
+            "optimizer": "bootstrap",
+            "metric": "research_quality_metric",
+            "training_data_hash": null,
+            "examples_before": 0,
+            "examples_after": 2,
+            "role_definition_changed": false,
+            "format_instructions_changed": false,
+            "optimizer_config": {
+              "max_bootstrapped_demos": 2,
+              "max_labeled_demos": 4,
+              "mipro_auto": null
+            }
+          }
+        ]
+      }
+    },
+    "Summarizer": {
+      "version": "1.0",
+      "type": "agent",
+      "prompts": {
+        "role_definition": "You are a research summarizer. Synthesize raw data into clear, concise summaries.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\n",
+          "# --- FINAL ANSWER FORMAT ---\nProvide your summary using tool_name \"final_answer\" with the summary as tool_input."
+        ],
+        "examples": [
+          "# --- Example: Summarization ---\n\"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n\n{\n    \"thought\": \"I need to synthesize this research data about climate change impacts on agriculture. I should highlight the main themes and their implications.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n    }\n}",
+          "# --- Example: Summarization ---\n\"Benefits: faster diagnosis, personalized medicine, drug discovery. Risks: data privacy, bias in algorithms, liability issues, job displacement concerns.\"\n\n{\n    \"thought\": \"I need to synthesize this data about AI in healthcare. I should balance the presentation of benefits and risks in a coherent narrative.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"AI in healthcare offers benefits like improved diagnostics and personalized treatment, but carries risks including data privacy concerns and potential for algorithmic bias.\"\n    }\n}"
+        ]
+      },
+      "model": {
+        "adapter": "HuggingFaceAdapter",
+        "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+        "adapter_kwargs": {}
+      },
+      "agent": {
+        "agent_type": "SimpleAgent",
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3,
+        "stateless": false
+      },
+      "metadata": {
+        "exported_at": "2026-02-04T18:55:57.898234",
+        "source": "fairlib.utils.config_manager"
+      },
+      "optimization": {
+        "runs": [
+          {
+            "timestamp": "2026-02-04T18:56:03.529942",
+            "optimizer": "bootstrap",
+            "metric": "research_quality_metric",
+            "training_data_hash": null,
+            "examples_before": 0,
+            "examples_after": 2,
+            "role_definition_changed": false,
+            "format_instructions_changed": false,
+            "optimizer_config": {
+              "max_bootstrapped_demos": 2,
+              "max_labeled_demos": 4,
+              "mipro_auto": null
+            }
+          }
+        ]
+      }
+    }
+  },
+  "max_delegation_steps": 15,
+  "metadata": {
+    "exported_at": "2026-02-04T18:55:44.845424",
+    "source": "fairlib.utils.config_manager"
+  },
+  "optimization": {
+    "runs": [
+      {
+        "timestamp": "2026-02-04T18:56:03.530067",
+        "optimizer": "bootstrap",
+        "metric": "research_quality_metric",
+        "training_data_hash": null,
+        "examples_before": 0,
+        "examples_after": 2,
+        "role_definition_changed": false,
+        "format_instructions_changed": false,
+        "optimizer_config": {
+          "max_bootstrapped_demos": 2,
+          "max_labeled_demos": 4,
+          "mipro_auto": null,
+          "optimize_manager": true,
+          "optimize_workers": true,
+          "workers_optimized": [
+            "DataGatherer",
+            "Summarizer"
+          ]
+        }
+      }
+    ]
+  }
+}

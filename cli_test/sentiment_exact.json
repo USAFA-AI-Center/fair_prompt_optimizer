@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "type": "simple_llm",
+  "prompts": {
+    "role_definition": "You are a sentiment classifier.\n\n# RESPONSE FORMAT (MANDATORY)\nRespond with ONLY one of:\nSENTIMENT: positive\nSENTIMENT: negative\nSENTIMENT: neutral\n\nNo explanations, just the label.",
+    "tool_instructions": [],
+    "worker_instructions": [],
+    "format_instructions": [],
+    "examples": [],
+    "system_prompt": "You are a sentiment classifier.\n\n# RESPONSE FORMAT (MANDATORY)\nRespond with ONLY one of:\nSENTIMENT: positive\nSENTIMENT: negative\nSENTIMENT: neutral\n\nNo explanations, just the label.\n\n# Examples:\nInput: Horrible experience. Would not recommend to anyone.\nOutput: SENTIMENT: negative\nInput: Save your money. This is garbage.\nOutput: SENTIMENT: negative"
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "dolphin3-qwen25-3b",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "planner_type": "None",
+    "tools": [],
+    "max_steps": 1,
+    "stateless": true
+  },
+  "optimization": {
+    "runs": [
+      {
+        "timestamp": "2026-02-04T17:35:06.281559",
+        "optimizer": "bootstrap",
+        "metric": "exact_match",
+        "training_data_hash": "sha256:4fc77e59d8e353ac",
+        "examples_before": 0,
+        "examples_after": 2,
+        "role_definition_changed": true,
+        "format_instructions_changed": false,
+        "optimizer_config": {
+          "max_bootstrapped_demos": 2,
+          "max_labeled_demos": 2,
+          "mipro_auto": null
+        }
+      }
+    ]
+  }
+}

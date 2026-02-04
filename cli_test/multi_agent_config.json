@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "type": "multi_agent",
+  "manager": {
+    "prompts": {
+      "role_definition": "# TODO: Define manager's role\n# Example: You are a project manager. Analyze requests and delegate to specialist workers.",
+      "tool_instructions": [],
+      "worker_instructions": [
+        {
+          "name": "# TODO: Worker1",
+          "role_description": "# TODO: What this worker does"
+        },
+        {
+          "name": "# TODO: Worker2",
+          "role_description": "# TODO: What this worker does"
+        }
+      ],
+      "format_instructions": [
+        "Use 'delegate' to assign tasks: {\"tool_name\": \"delegate\", \"tool_input\": {\"worker_name\": \"...\", \"task\": \"...\"}}",
+        "Use 'final_answer' when complete: {\"tool_name\": \"final_answer\", \"tool_input\": \"...\"}"
+      ],
+      "examples": []
+    },
+    "model": {
+      "adapter": "HuggingFaceAdapter",
+      "model_name": "# TODO: Set model"
+    },
+    "agent": {
+      "planner_type": "ManagerPlanner",
+      "tools": [],
+      "max_steps": 15
+    }
+  },
+  "workers": {
+    "Worker1": {
+      "prompts": {
+        "role_definition": "# TODO: Define worker's specialty",
+        "tool_instructions": [],
+        "format_instructions": [],
+        "examples": []
+      },
+      "model": {
+        "adapter": "HuggingFaceAdapter",
+        "model_name": "# TODO: Set model"
+      },
+      "agent": {
+        "planner_type": "SimpleReActPlanner",
+        "tools": [],
+        "max_steps": 5,
+        "stateless": true
+      }
+    }
+  },
+  "max_delegation_steps": 15
+}

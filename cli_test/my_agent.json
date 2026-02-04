@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "type": "agent",
+  "prompts": {
+    "role_definition": "# TODO: Define your agent's role and goal\n# Example: You are a helpful research assistant with access to tools.",
+    "tool_instructions": [
+      {
+        "name": "# TODO: tool_name",
+        "description": "# TODO: What this tool does"
+      }
+    ],
+    "worker_instructions": [],
+    "format_instructions": [
+      "Always show your reasoning in a 'Thought' section.",
+      "Provide actions as JSON with 'tool_name' and 'tool_input'.",
+      "When you have the final answer, use the 'final_answer' action."
+    ],
+    "examples": []
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "# TODO: Set your model name",
+    "adapter_kwargs": {}
+  },
+  "agent": {
+    "planner_type": "SimpleReActPlanner",
+    "tools": [
+      "# TODO: List tool class names (e.g., SafeCalculatorTool)"
+    ],
+    "max_steps": 10,
+    "stateless": false
+  }
+}

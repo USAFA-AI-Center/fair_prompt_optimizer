@@ -1,0 +1,95 @@
+{
+  "version": "1.0",
+  "type": "multi_agent",
+  "manager": {
+    "prompts": {
+      "role_definition": "You are a research team manager. Coordinate research tasks by delegating to DataGatherer for information collection, then Summarizer for synthesis.",
+      "tool_instructions": [],
+      "worker_instructions": [
+        {
+          "name": "DataGatherer",
+          "role_description": "Searches for relevant information. Input: search topic. Output: raw findings."
+        },
+        {
+          "name": "Summarizer",
+          "role_description": "Synthesizes raw data into clear summaries. Input: raw data. Output: concise summary."
+        }
+      ],
+      "format_instructions": [
+        "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"WorkerName\", \"tool_input\": \"task\"}}",
+        "Use 'final_answer' when complete."
+      ],
+      "examples": [
+        "# --- Example: Research Coordination ---\n\"What are the latest developments in quantum computing?\"\n\n{\n    \"thought\": \"I need to research the latest developments in quantum computing. I will first delegate to DataGatherer to search for recent news and articles.\",\n    \"action\": {\n        \"tool_name\": \"DataGatherer\",\n        \"tool_input\": \"latest quantum computing developments 2024\"\n    }\n}\n\nObservation: DataGatherer returned: \"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n\n{\n    \"thought\": \"I have gathered raw research data. Now I will delegate to Summarizer to synthesize this into a coherent summary.\",\n    \"action\": {\n        \"tool_name\": \"Summarizer\",\n        \"tool_input\": \"Recent news includes IBM's 1000+ qubit processor, Google's error correction breakthrough, and new quantum algorithms for optimization problems.\"\n    }\n}\n\nObservation: Summarizer returned: \"Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.\"\n\n{\n    \"thought\": \"I have a well-synthesized summary from the Summarizer. I can now provide the final answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Recent developments in quantum computing include advances in error correction, increased qubit counts, and progress toward quantum advantage in specific applications.\"\n    }\n}",
+        "# --- Example: Research Coordination ---\n\"Summarize the key findings about climate change effects on agriculture\"\n\n{\n    \"thought\": \"I need to research climate change effects on agriculture. I will delegate to DataGatherer first.\",\n    \"action\": {\n        \"tool_name\": \"DataGatherer\",\n        \"tool_input\": \"climate change effects agriculture research findings\"\n    }\n}\n\nObservation: DataGatherer returned: \"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n\n{\n    \"thought\": \"I have raw research data. Now I will delegate to Summarizer to create a coherent summary.\",\n    \"action\": {\n        \"tool_name\": \"Summarizer\",\n        \"tool_input\": \"Studies show changing rainfall patterns affecting crop yields, increased pest and disease pressure, shifting planting dates, and heat stress on livestock.\"\n    }\n}\n\nObservation: Summarizer returned: \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n\n{\n    \"thought\": \"The summary is complete. I will provide the final answer.\",\n    \"action\": {\n        \"tool_name\": \"final_answer\",\n        \"tool_input\": \"Climate change affects agriculture through altered precipitation patterns, increased pest pressure, and shifting growing seasons, requiring adaptive strategies from farmers.\"\n    }\n}"
+      ]
+    },
+    "agent": {
+      "planner_type": "ReActPlanner",
+      "tools": [],
+      "max_steps": 8
+    }
+  },
+  "workers": {
+    "DataGatherer": {
+      "prompts": {
+        "role_definition": "You are a research data gatherer. Find accurate, relevant information on the given topic.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"final_answer\", \"tool_input\": \"findings\"}}"
+        ],
+        "examples": []
+      },
+      "agent": {
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3
+      }
+    },
+    "Summarizer": {
+      "prompts": {
+        "role_definition": "You are a research summarizer. Synthesize raw data into clear, concise summaries.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "Respond with JSON: {\"thought\": \"...\", \"action\": {\"tool_name\": \"final_answer\", \"tool_input\": \"summary\"}}"
+        ],
+        "examples": []
+      },
+      "agent": {
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3
+      }
+    }
+  },
+  "model": {
+    "adapter": "HuggingFaceAdapter",
+    "model_name": "dolphin3-qwen25-3b",
+    "adapter_kwargs": {}
+  },
+  "max_delegation_steps": 10,
+  "optimization": {
+    "runs": [
+      {
+        "timestamp": "2026-02-04T18:15:19.559921",
+        "optimizer": "bootstrap",
+        "metric": "contains_answer",
+        "training_data_hash": "sha256:0ed36b9fc811f7ce",
+        "examples_before": 0,
+        "examples_after": 2,
+        "role_definition_changed": false,
+        "format_instructions_changed": false,
+        "optimizer_config": {
+          "max_bootstrapped_demos": 2,
+          "max_labeled_demos": 2,
+          "mipro_auto": null,
+          "optimize_manager": true,
+          "optimize_workers": false,
+          "workers_optimized": []
+        }
+      }
+    ]
+  }
+}

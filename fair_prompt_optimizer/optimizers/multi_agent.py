@@ -112,7 +112,7 @@ class MultiAgentModule(dspy.Module):
         clear_cuda_memory()
 
         try:
-            result = run_async(self.runner.run(user_input))
+            result = run_async(self.runner.arun(user_input))
         except Exception as e:
             logger.error(f"MultiAgent error: {e}")
             result = f"Error: {e}"
@@ -518,6 +518,12 @@ class MultiAgentOptimizer:
         except Exception as e:
             logger.warning(f"MIPRO instruction optimization failed: {e}")
             return self.config.config.get("manager", {}).get("prompts", {}).get("role_definition", "")
+
+    def test(self, user_input: str) -> str:
+        """Run a test input through the multi-agent system."""
+        module = self._module or MultiAgentModule(self.runner)
+        result = module(user_input=user_input)
+        return result.response
 
     def save(self, path: str):
         """Save the optimized config."""

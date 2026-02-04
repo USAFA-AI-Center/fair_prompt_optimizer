@@ -206,17 +206,32 @@ class TestTrainingExamples:
     
     def test_dspy_translation(self):
         from fair_prompt_optimizer.config import TrainingExample, DSPyTranslator
-        
+
         examples = [
             TrainingExample(inputs={"user_input": "Test"}, expected_output="Result"),
         ]
-        
+
         translator = DSPyTranslator()
         dspy_examples = translator.to_dspy_examples(examples)
-        
+
         assert len(dspy_examples) == 1
         assert dspy_examples[0].user_input == "Test"
-        assert dspy_examples[0].response == "Result"
+        # Output field defaults to "expected_output"
+        assert dspy_examples[0].expected_output == "Result"
+
+    def test_dspy_translation_custom_fields(self):
+        from fair_prompt_optimizer.config import TrainingExample, DSPyTranslator
+
+        examples = [
+            TrainingExample(inputs={"query": "Test query"}, expected_output="Result"),
+        ]
+
+        translator = DSPyTranslator(input_field="query", output_field="answer")
+        dspy_examples = translator.to_dspy_examples(examples)
+
+        assert len(dspy_examples) == 1
+        assert dspy_examples[0].query == "Test query"
+        assert dspy_examples[0].answer == "Result"
 
 
 class TestFileHash:
@@ -251,6 +266,196 @@ class TestFileHash:
             hash2 = compute_file_hash(str(path))
             
             assert hash1 != hash2
+
+
+class TestTrainingExampleFullTrace:
+    """Test TrainingExample with full_trace field."""
+
+    def test_full_trace_attribute(self):
+        from fair_prompt_optimizer.config import TrainingExample
+
+        example = TrainingExample(
+            inputs={"user_input": "What is 2+2?"},
+            expected_output="4",
+            full_trace="User: What is 2+2?\nThought: Calculate\nAction: calc(2+2)\nAnswer: 4",
+        )
+
+        assert example.full_trace is not None
+        assert "Thought" in example.full_trace
+        assert "Action" in example.full_trace
+
+    def test_full_trace_none_by_default(self):
+        from fair_prompt_optimizer.config import TrainingExample
+
+        example = TrainingExample(
+            inputs={"user_input": "test"},
+            expected_output="result",
+        )
+
+        assert example.full_trace is None
+
+
+class TestOptimizedConfigAccessors:
+    """Test OptimizedConfig property accessors."""
+
+    def test_format_instructions_accessor(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        config = OptimizedConfig(
+            config={
+                "prompts": {"format_instructions": ["Format 1", "Format 2"]}
+            }
+        )
+
+        assert config.format_instructions == ["Format 1", "Format 2"]
+
+    def test_format_instructions_setter(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        config = OptimizedConfig(config={"prompts": {}})
+        config.format_instructions = ["New format"]
+
+        assert config.format_instructions == ["New format"]
+
+    def test_type_accessor(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        config = OptimizedConfig(config={"type": "agent"})
+        assert config.type == "agent"
+
+    def test_type_accessor_default(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        config = OptimizedConfig(config={})
+        assert config.type == "agent"  # Default value
+
+
+class TestOptimizationRunDetails:
+    """Test OptimizationRun with detailed config."""
+
+    def test_run_with_optimizer_config(self):
+        from fair_prompt_optimizer.config import OptimizationProvenance
+
+        prov = OptimizationProvenance()
+        prov.record_run(
+            optimizer="mipro",
+            metric="accuracy",
+            num_examples=20,
+            examples_before=0,
+            examples_after=5,
+            role_definition_changed=True,
+            format_instructions_changed=True,
+            optimizer_config={
+                "max_bootstrapped_demos": 4,
+                "mipro_auto": "medium",
+            },
+        )
+
+        run = prov.runs[0]
+        assert run.role_definition_changed == True
+        assert run.format_instructions_changed == True
+        assert run.optimizer_config["max_bootstrapped_demos"] == 4
+        assert run.optimizer_config["mipro_auto"] == "medium"
+
+
+class TestSaveTrainingExamples:
+    """Test saving training examples."""
+
+    def test_save_and_reload(self):
+        from fair_prompt_optimizer.config import (
+            TrainingExample,
+            save_training_examples,
+            load_training_examples,
+        )
+
+        examples = [
+            TrainingExample(
+                inputs={"user_input": "Hello"},
+                expected_output="Hi",
+                full_trace="User: Hello\nAssistant: Hi",
+            ),
+            TrainingExample(
+                inputs={"user_input": "Bye"},
+                expected_output="Goodbye",
+            ),
+        ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "examples.json"
+            save_training_examples(examples, str(path))
+
+            loaded = load_training_examples(str(path))
+
+            assert len(loaded) == 2
+            assert loaded[0].inputs["user_input"] == "Hello"
+            assert loaded[0].full_trace is not None
+            assert loaded[1].full_trace is None
+
+
+class TestOptimizedConfigFromDict:
+    """Test OptimizedConfig.from_dict edge cases."""
+
+    def test_from_dict_with_nested_optimization(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        data = {
+            "version": "1.0",
+            "type": "agent",
+            "prompts": {"examples": []},
+            "optimization": {
+                "runs": [
+                    {
+                        "timestamp": "2024-01-01T00:00:00",
+                        "optimizer": "bootstrap",
+                        "metric": "test",
+                        "examples_before": 0,
+                        "examples_after": 3,
+                        "optimizer_config": {"key": "value"},
+                    }
+                ]
+            },
+        }
+
+        config = OptimizedConfig.from_dict(data)
+
+        assert config.optimization.optimized == True
+        assert len(config.optimization.runs) == 1
+        assert config.optimization.runs[0].optimizer == "bootstrap"
+
+    def test_from_dict_minimal(self):
+        from fair_prompt_optimizer.config import OptimizedConfig
+
+        data = {"prompts": {}}
+        config = OptimizedConfig.from_dict(data)
+
+        assert config.optimization.optimized == False
+
+
+class TestComputeFileHashEdgeCases:
+    """Test compute_file_hash edge cases."""
+
+    def test_hash_empty_file(self):
+        from fair_prompt_optimizer.config import compute_file_hash
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "empty.json"
+            path.touch()
+
+            hash_val = compute_file_hash(str(path))
+            assert hash_val.startswith("sha256:")
+
+    def test_hash_large_file(self):
+        from fair_prompt_optimizer.config import compute_file_hash
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "large.json"
+            # Create a file with substantial content
+            with open(path, "w") as f:
+                json.dump({"data": "x" * 100000}, f)
+
+            hash_val = compute_file_hash(str(path))
+            assert hash_val.startswith("sha256:")
+            assert len(hash_val) > 10  # Has actual hash content
 
 
 if __name__ == "__main__":

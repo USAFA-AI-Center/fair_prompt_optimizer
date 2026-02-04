@@ -191,7 +191,7 @@ result = await optimized_agent.arun("What is 75% of 120?")
 For hierarchical systems with manager and workers.
 
 ```python
-from fairlib.modules.orchestration.hierarchical_runner import HierarchicalAgentRunner
+from fairlib.modules.agent.multi_agent_runner import HierarchicalAgentRunner
 from fairlib.utils.config_manager import load_multi_agent
 
 from fair_prompt_optimizer import (
@@ -202,7 +202,7 @@ from fair_prompt_optimizer import (
 
 # 1. Create runner (manager + workers)
 runner = HierarchicalAgentRunner(
-    manager=manager_agent,
+    manager_agent=manager_agent,
     workers={"Calculator": calculator_worker},
 )
 
@@ -277,9 +277,9 @@ config = optimizer.compile(
 
 | Mode | Trials | Speed | Use Case |
 |------|--------|-------|----------|
-| `light` | ~10 | Fast | Testing, quick iteration |
-| `medium` | ~25 | Moderate | Balanced optimization |
-| `heavy` | ~50+ | Slow | Final production tuning |
+| `light` | ~10 | ~3 min | Testing, quick iteration |
+| `medium` | ~18 | ~6 min | Balanced optimization |
+| `heavy` | ~27 | ~8 min | Final production tuning |
 
 ## Training Data Format
 
@@ -318,9 +318,25 @@ The `full_trace` shows the complete ReAct loop so the model learns the workflow 
 |--------|-------------|-------|
 | `exact_match` | Exact string match | `metric=exact_match` |
 | `contains_answer` | Expected is substring of actual | `metric=contains_answer` |
-| `numeric_accuracy` | Numeric comparison (1% tolerance) | `metric=numeric_accuracy` |
-| `fuzzy_match` | Character-level similarity | `metric=fuzzy_match` |
+| `numeric_accuracy` | Numeric comparison with tolerance | `metric=numeric_accuracy` |
+| `fuzzy_match` | Character-level Jaccard similarity | `metric=fuzzy_match` |
 | `format_compliance(prefix)` | Output starts with prefix | `metric=format_compliance("ANSWER:")` |
+| `sentiment_format_metric` | Graduated scoring for sentiment format | `metric=sentiment_format_metric` |
+| `research_quality_metric` | Evaluates research output quality | `metric=research_quality_metric` |
+| `json_format_compliance` | Detects malformed JSON/KV format leakage | `metric=json_format_compliance` |
+| `format_compliance_score` | Graduated version of json_format_compliance (0-1) | `metric=format_compliance_score` |
+| `numeric_accuracy_with_format` | Correct answer + clean format (1.0/0.5/0.0) | `metric=numeric_accuracy_with_format` |
+| `keyword_match(keywords)` | All keywords present in output | `metric=keyword_match(["price", "$"])` |
+
+### Format Compliance Detection
+
+When fair_llm's planner fails to parse a model's response (malformed JSON or KV format), it falls back to returning the raw text as a FinalAnswer. The format compliance metrics detect these failures:
+
+- **`json_format_compliance`**: Returns `True` if clean, `False` if format leaked
+- **`format_compliance_score`**: Graduated scoring (1.0=clean, 0.7=minor, 0.3=moderate, 0.0=severe)
+- **`numeric_accuracy_with_format`**: Combined metric (1.0=correct+clean, 0.5=correct+leaked, 0.0=wrong)
+
+Detects both JSON fragments (`{"thought":`, `"tool_name":`) and KV patterns (`Thought:`, `Action:`).
 
 ### Custom Metrics
 
@@ -335,7 +351,12 @@ config = optimizer.compile(..., metric=my_metric)
 
 ## Config Files
 
-See [CONFIG_REFERENCE.md](CONFIG_REFERENCE.md) for complete documentation of all config structures.
+See [docs/CONFIG_REFERENCE.md](docs/CONFIG_REFERENCE.md) for complete documentation including:
+- All config types (simple_llm, agent, multi_agent)
+- Full CLI command reference
+- All metrics with examples
+- Python API reference
+- Training data format (`full_trace`)
 
 ### Quick Overview
 
@@ -464,12 +485,28 @@ config = load_optimized_config("agent_optimized.json")  # ✓
 
 ## Examples
 
-See `examples/examples.py` for complete working examples:
+The `examples/` directory contains standalone, runnable examples for each optimization level:
+
+| File | Description |
+|------|-------------|
+| `01_simple_llm_example.py` | Sentiment classification with SimpleLLMOptimizer |
+| `02_agent_example.py` | Math agent with calculator tool using AgentOptimizer |
+| `03_multi_agent_example.py` | Research team (manager + workers) with MultiAgentOptimizer |
 
 ```bash
-cd examples
-python examples.py
+# Run individual examples
+cd /path/to/fair_prompt_optimizer
+source .venv/bin/activate
+
+python examples/01_simple_llm_example.py   # SimpleLLM
+python examples/02_agent_example.py        # Agent
+python examples/03_multi_agent_example.py  # Multi-Agent
+
+# Or run all examples sequentially
+python examples/examples.py
 ```
+
+Each example creates optimized config files in the `examples/` directory that you can inspect.
 
 ## API Reference
 
@@ -512,5 +549,26 @@ from fair_prompt_optimizer import (
     keyword_match,
     combined_metric,
     create_metric,
+    sentiment_format_metric,
+    research_quality_metric,
+    json_format_compliance,
 )
 ```
+
+## Running Tests
+
+```bash
+# Activate virtual environment
+source .venv/bin/activate
+
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=fair_prompt_optimizer
+
+# Skip slow tests (require LLM)
+pytest tests/ -v -m "not slow"
+```
+
+**Test coverage:** 143 tests covering config, metrics, optimizers, CLI, and fairlib integration.

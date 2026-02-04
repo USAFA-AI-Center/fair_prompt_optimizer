@@ -1113,5 +1113,178 @@ def sample_examples():
     ]
 
 
+class TestCombinePromptComponents:
+    """Test combine_prompt_components utility."""
+
+    def test_combine_role_only(self):
+        from fair_prompt_optimizer.optimizers.base import combine_prompt_components
+
+        result = combine_prompt_components("You are a helpful assistant.")
+
+        assert "<ROLE_DEFINITION>" in result
+        assert "</ROLE_DEFINITION>" in result
+        assert "You are a helpful assistant." in result
+
+    def test_combine_with_format_instructions(self):
+        from fair_prompt_optimizer.optimizers.base import combine_prompt_components
+
+        result = combine_prompt_components(
+            "You are a helper.",
+            format_instructions=["Be concise", "Show your work"],
+        )
+
+        assert "<ROLE_DEFINITION>" in result
+        assert "<FORMAT_INSTRUCTIONS>" in result
+        assert "<FORMAT_ITEM>" in result
+        assert "Be concise" in result
+        assert "Show your work" in result
+
+    def test_combine_with_dict_format_instructions(self):
+        from fair_prompt_optimizer.optimizers.base import combine_prompt_components
+
+        result = combine_prompt_components(
+            "Role",
+            format_instructions=[
+                {"text": "Format 1"},
+                {"content": "Format 2"},
+            ],
+        )
+
+        assert "Format 1" in result
+        assert "Format 2" in result
+
+
+class TestParseOptimizedPrompt:
+    """Test parse_optimized_prompt utility."""
+
+    def test_parse_valid_optimized_text(self):
+        from fair_prompt_optimizer.optimizers.base import parse_optimized_prompt
+
+        optimized_text = """
+        <ROLE_DEFINITION>
+        You are an optimized assistant.
+        </ROLE_DEFINITION>
+
+        <FORMAT_INSTRUCTIONS>
+        <FORMAT_ITEM>
+        Be very concise.
+        </FORMAT_ITEM>
+        <FORMAT_ITEM>
+        Always explain.
+        </FORMAT_ITEM>
+        </FORMAT_INSTRUCTIONS>
+        """
+
+        result = parse_optimized_prompt(
+            optimized_text,
+            original_role="Original role",
+            original_format_instructions=["Old format"],
+        )
+
+        assert result.role_definition == "You are an optimized assistant."
+        assert result.role_definition_changed == True
+        assert len(result.format_instructions) == 2
+        assert "Be very concise." in result.format_instructions
+        assert result.format_instructions_changed == True
+
+    def test_parse_with_typo_in_closing_tag(self):
+        from fair_prompt_optimizer.optimizers.base import parse_optimized_prompt
+
+        # LLMs sometimes make typos in XML tags
+        optimized_text = """
+        <ROLE_DEFINITION>
+        New role
+        </ROLE_DEF>
+        """
+
+        result = parse_optimized_prompt(
+            optimized_text,
+            original_role="Original",
+        )
+
+        assert result.role_definition == "New role"
+        assert result.role_definition_changed == True
+
+    def test_parse_falls_back_to_original(self):
+        from fair_prompt_optimizer.optimizers.base import parse_optimized_prompt
+
+        # Text without proper markers
+        optimized_text = "Just some random text without markers"
+
+        result = parse_optimized_prompt(
+            optimized_text,
+            original_role="Original role",
+            original_format_instructions=["Original format"],
+        )
+
+        assert result.role_definition == "Original role"
+        assert result.role_definition_changed == False
+        assert result.format_instructions == ["Original format"]
+        assert result.format_instructions_changed == False
+
+    def test_parse_unchanged_role(self):
+        from fair_prompt_optimizer.optimizers.base import parse_optimized_prompt
+
+        optimized_text = """
+        <ROLE_DEFINITION>
+        Same role
+        </ROLE_DEFINITION>
+        """
+
+        result = parse_optimized_prompt(
+            optimized_text,
+            original_role="Same role",
+        )
+
+        assert result.role_definition_changed == False
+
+
+class TestOptimizedPromptsDataclass:
+    """Test the OptimizedPrompts dataclass."""
+
+    def test_default_values(self):
+        from fair_prompt_optimizer.config import OptimizedPrompts
+
+        prompts = OptimizedPrompts()
+
+        assert prompts.role_definition is None
+        assert prompts.role_definition_changed == False
+        assert prompts.format_instructions is None
+        assert prompts.format_instructions_changed == False
+
+
+class TestMultiAgentOptimizerTest:
+    """Test MultiAgentOptimizer.test() method."""
+
+    def test_multi_agent_test_method(self):
+        from fair_prompt_optimizer.optimizers import MultiAgentOptimizer
+        from unittest.mock import Mock, patch
+
+        # Create mock runner
+        mock_runner = Mock()
+
+        async def mock_arun(input_text):
+            return f"Response to: {input_text}"
+        mock_runner.arun = mock_arun
+        mock_runner.manager = Mock()
+        mock_runner.manager.planner = Mock()
+        mock_runner.manager.planner.prompt_builder = Mock()
+        mock_runner.manager.planner.prompt_builder.role_definition = None
+        mock_runner.workers = {}
+
+        with patch('fair_prompt_optimizer.config.extract_multi_agent_config') as mock_extract:
+            mock_extract.return_value = {
+                "version": "1.0",
+                "type": "multi_agent",
+                "manager": {"prompts": {}},
+                "workers": {},
+            }
+
+            optimizer = MultiAgentOptimizer(mock_runner)
+            result = optimizer.test("Test input")
+
+            assert "Test input" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-m", "not slow"])

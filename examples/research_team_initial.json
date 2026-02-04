@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "type": "multi_agent",
+  "manager": {
+    "version": "1.0",
+    "type": "agent",
+    "prompts": {
+      "role_definition": "You are a research team manager. Coordinate research tasks by delegating to DataGatherer for information collection, then Summarizer for synthesis.",
+      "tool_instructions": [],
+      "worker_instructions": [
+        {
+          "name": "DataGatherer",
+          "role_description": "Searches for relevant information. Input: search topic. Output: raw findings."
+        },
+        {
+          "name": "Summarizer",
+          "role_description": "Synthesizes raw data into clear summaries. Input: raw data. Output: concise summary."
+        }
+      ],
+      "format_instructions": [
+        "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\nDelegate tasks to workers using their names as tool_name.\n",
+        "# --- WORKFLOW ---\n1. Delegate to DataGatherer to gather information\n2. Delegate to Summarizer with the gathered data\n3. Provide the final answer using \"final_answer\""
+      ],
+      "examples": []
+    },
+    "model": {
+      "adapter": "HuggingFaceAdapter",
+      "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+      "adapter_kwargs": {}
+    },
+    "agent": {
+      "agent_type": "SimpleAgent",
+      "planner_type": "ReActPlanner",
+      "tools": [],
+      "max_steps": 8,
+      "stateless": false
+    },
+    "metadata": {
+      "exported_at": "2026-02-04T18:55:42.615524",
+      "source": "fairlib.utils.config_manager"
+    }
+  },
+  "workers": {
+    "DataGatherer": {
+      "version": "1.0",
+      "type": "agent",
+      "prompts": {
+        "role_definition": "You are a research data gatherer. Find accurate, relevant information on the given topic.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\n",
+          "# --- FINAL ANSWER FORMAT ---\nUse tool_name \"final_answer\" with the gathered information as tool_input."
+        ],
+        "examples": []
+      },
+      "model": {
+        "adapter": "HuggingFaceAdapter",
+        "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+        "adapter_kwargs": {}
+      },
+      "agent": {
+        "agent_type": "SimpleAgent",
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3,
+        "stateless": false
+      },
+      "metadata": {
+        "exported_at": "2026-02-04T18:55:42.615565",
+        "source": "fairlib.utils.config_manager"
+      }
+    },
+    "Summarizer": {
+      "version": "1.0",
+      "type": "agent",
+      "prompts": {
+        "role_definition": "You are a research summarizer. Synthesize raw data into clear, concise summaries.",
+        "tool_instructions": [],
+        "worker_instructions": [],
+        "format_instructions": [
+          "# --- RESPONSE FORMAT ---\nRespond with a JSON object containing \"thought\" and \"action\" keys.\n",
+          "# --- FINAL ANSWER FORMAT ---\nProvide your summary using tool_name \"final_answer\" with the summary as tool_input."
+        ],
+        "examples": []
+      },
+      "model": {
+        "adapter": "HuggingFaceAdapter",
+        "model_name": "cognitivecomputations/Dolphin3.0-Qwen2.5-3b",
+        "adapter_kwargs": {}
+      },
+      "agent": {
+        "agent_type": "SimpleAgent",
+        "planner_type": "ReActPlanner",
+        "tools": [],
+        "max_steps": 3,
+        "stateless": false
+      },
+      "metadata": {
+        "exported_at": "2026-02-04T18:55:42.615570",
+        "source": "fairlib.utils.config_manager"
+      }
+    }
+  },
+  "max_delegation_steps": 15,
+  "metadata": {
+    "exported_at": "2026-02-04T18:55:42.615572",
+    "source": "fairlib.utils.config_manager"
+  }
+}
