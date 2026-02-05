@@ -5,283 +5,289 @@ Unit tests for fair_prompt_optimizer metrics module.
 Run with: pytest tests/test_metrics.py -v
 """
 
-import pytest
 from dataclasses import dataclass
-from typing import Any
+
+import pytest
 
 
 @dataclass
 class MockExample:
     """Mock training example."""
+
     expected_output: str
     inputs: dict = None
 
 
-@dataclass  
+@dataclass
 class MockPrediction:
     """Mock prediction from model."""
+
     response: str
 
 
 class TestExactMatch:
     """Test exact_match metric."""
-    
+
     def test_exact_match_true(self):
         from fair_prompt_optimizer.metrics import exact_match
-        
+
         example = MockExample(expected_output="Hello")
         prediction = MockPrediction(response="Hello")
-        
-        assert exact_match(example, prediction) == True
-    
+
+        assert exact_match(example, prediction)
+
     def test_exact_match_false(self):
         from fair_prompt_optimizer.metrics import exact_match
-        
+
         example = MockExample(expected_output="Hello")
         prediction = MockPrediction(response="Hi")
-        
-        assert exact_match(example, prediction) == False
-    
+
+        assert not exact_match(example, prediction)
+
     def test_exact_match_whitespace(self):
         from fair_prompt_optimizer.metrics import exact_match
-        
+
         example = MockExample(expected_output="  Hello  ")
         prediction = MockPrediction(response="Hello")
-        
-        assert exact_match(example, prediction) == True
+
+        assert exact_match(example, prediction)
 
 
 class TestContainsAnswer:
     """Test contains_answer metric."""
-    
+
     def test_contains_true(self):
         from fair_prompt_optimizer.metrics import contains_answer
-        
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="The answer is 42.")
-        
-        assert contains_answer(example, prediction) == True
-    
+
+        assert contains_answer(example, prediction)
+
     def test_contains_false(self):
         from fair_prompt_optimizer.metrics import contains_answer
-        
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="The answer is 43.")
-        
-        assert contains_answer(example, prediction) == False
-    
+
+        assert not contains_answer(example, prediction)
+
     def test_contains_case_insensitive(self):
         from fair_prompt_optimizer.metrics import contains_answer
-        
+
         example = MockExample(expected_output="HELLO")
         prediction = MockPrediction(response="hello world")
-        
-        assert contains_answer(example, prediction) == True
+
+        assert contains_answer(example, prediction)
 
 
 class TestNumericAccuracy:
     """Test numeric_accuracy metric."""
-    
+
     def test_exact_number(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
-        
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="42")
-        
-        assert numeric_accuracy(example, prediction) == True
-    
+
+        assert numeric_accuracy(example, prediction)
+
     def test_number_in_text(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
-        
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="The result is 42.")
-        
-        assert numeric_accuracy(example, prediction) == True
-    
+
+        assert numeric_accuracy(example, prediction)
+
     def test_tolerance(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
-        
+
         example = MockExample(expected_output="42.0")
         prediction = MockPrediction(response="42.005")
-        
-        assert numeric_accuracy(example, prediction, tolerance=0.01) == True
-        assert numeric_accuracy(example, prediction, tolerance=0.001) == False
-    
+
+        assert numeric_accuracy(example, prediction, tolerance=0.01)
+        assert not numeric_accuracy(example, prediction, tolerance=0.001)
+
     def test_decimal_numbers(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
-        
+
         example = MockExample(expected_output="3.14159")
         prediction = MockPrediction(response="Pi is approximately 3.14159")
-        
-        assert numeric_accuracy(example, prediction) == True
-    
+
+        assert numeric_accuracy(example, prediction)
+
     def test_no_number(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
-        
+
         example = MockExample(expected_output="hello")
         prediction = MockPrediction(response="world")
-        
-        assert numeric_accuracy(example, prediction) == False
+
+        assert not numeric_accuracy(example, prediction)
 
 
 class TestFormatCompliance:
     """Test format_compliance metric factory."""
-    
+
     def test_prefix_match(self):
         from fair_prompt_optimizer.metrics import format_compliance
-        
+
         metric = format_compliance("ANSWER:")
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="ANSWER: 42")
-        
-        assert metric(example, prediction) == True
-    
+
+        assert metric(example, prediction)
+
     def test_prefix_no_match(self):
         from fair_prompt_optimizer.metrics import format_compliance
-        
+
         metric = format_compliance("ANSWER:")
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="The answer is 42")
-        
-        assert metric(example, prediction) == False
-    
+
+        assert not metric(example, prediction)
+
     def test_prefix_case_insensitive(self):
         from fair_prompt_optimizer.metrics import format_compliance
-        
+
         metric = format_compliance("ANSWER:")
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="answer: 42")
-        
-        assert metric(example, prediction) == True
+
+        assert metric(example, prediction)
 
 
 class TestFuzzyMatch:
     """Test fuzzy_match metric."""
-    
+
     def test_identical(self):
         from fair_prompt_optimizer.metrics import fuzzy_match
-        
+
         example = MockExample(expected_output="hello")
         prediction = MockPrediction(response="hello")
-        
+
         assert fuzzy_match(example, prediction) == 1.0
-    
+
     def test_partial(self):
         from fair_prompt_optimizer.metrics import fuzzy_match
-        
+
         # Use strings with different character sets for partial match
         example = MockExample(expected_output="hello")
         prediction = MockPrediction(response="help")  # shares h, e, l but has p instead of o
-        
+
         score = fuzzy_match(example, prediction)
         assert 0.5 < score < 1.0  # Jaccard on {h,e,l,o} vs {h,e,l,p} = 3/5 = 0.6
-    
+
     def test_completely_different(self):
         from fair_prompt_optimizer.metrics import fuzzy_match
-        
+
         example = MockExample(expected_output="abc")
         prediction = MockPrediction(response="xyz")
-        
+
         score = fuzzy_match(example, prediction)
         assert score == 0.0
 
 
 class TestKeywordMatch:
     """Test keyword_match metric factory."""
-    
+
     def test_all_keywords_present(self):
         from fair_prompt_optimizer.metrics import keyword_match
-        
+
         metric = keyword_match(["price", "total", "$"])
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="The total price is $50")
-        
-        assert metric(example, prediction) == True
-    
+
+        assert metric(example, prediction)
+
     def test_missing_keyword(self):
         from fair_prompt_optimizer.metrics import keyword_match
-        
+
         metric = keyword_match(["price", "total", "$"])
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="The price is 50")
-        
-        assert metric(example, prediction) == False
+
+        assert not metric(example, prediction)
 
 
 class TestCombinedMetric:
     """Test combined_metric factory."""
-    
+
     def test_all_pass(self):
-        from fair_prompt_optimizer.metrics import combined_metric, format_compliance, contains_answer
-        
+        from fair_prompt_optimizer.metrics import (
+            combined_metric,
+            contains_answer,
+            format_compliance,
+        )
+
         metric = combined_metric(
             format_compliance("RESULT:"),
             contains_answer,
         )
-        
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="RESULT: The answer is 42")
-        
+
         score = metric(example, prediction)
         assert score == 1.0
-    
+
     def test_partial_pass(self):
-        from fair_prompt_optimizer.metrics import combined_metric, format_compliance, contains_answer
-        
-        metric = combined_metric(
-            format_compliance("RESULT:"),
+        from fair_prompt_optimizer.metrics import (
+            combined_metric,
             contains_answer,
-            weights=[0.5, 0.5]
+            format_compliance,
         )
-        
+
+        metric = combined_metric(format_compliance("RESULT:"), contains_answer, weights=[0.5, 0.5])
+
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="The answer is 42")  # No RESULT: prefix
-        
+
         score = metric(example, prediction)
         assert score == 0.5
 
 
 class TestCreateMetric:
     """Test create_metric factory."""
-    
+
     def test_single_check(self):
         from fair_prompt_optimizer.metrics import create_metric
-        
+
         metric = create_metric(check_format="ANSWER:")
-        
+
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="ANSWER: 42")
-        
-        assert metric(example, prediction) == True
-    
+
+        assert metric(example, prediction)
+
     def test_multiple_checks(self):
         from fair_prompt_optimizer.metrics import create_metric
-        
+
         metric = create_metric(
             check_format="RESULT:",
             check_numeric=True,
         )
-        
+
         example = MockExample(expected_output="42")
         good_prediction = MockPrediction(response="RESULT: 42")
         bad_prediction = MockPrediction(response="42")  # Missing format
-        
-        assert metric(example, good_prediction) == True
-        assert metric(example, bad_prediction) == False
-    
+
+        assert metric(example, good_prediction)
+        assert not metric(example, bad_prediction)
+
     def test_empty_returns_exact_match(self):
         from fair_prompt_optimizer.metrics import create_metric, exact_match
-        
+
         metric = create_metric()
-        
+
         example = MockExample(expected_output="hello")
         prediction = MockPrediction(response="hello")
-        
+
         assert metric(example, prediction) == exact_match(example, prediction)
 
 
@@ -294,7 +300,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response="42")
 
-        assert json_format_compliance(example, prediction) == True
+        assert json_format_compliance(example, prediction)
 
     def test_clean_natural_language_passes(self):
         from fair_prompt_optimizer.metrics import json_format_compliance
@@ -302,7 +308,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="The result of the calculation is 42.")
 
-        assert json_format_compliance(example, prediction) == True
+        assert json_format_compliance(example, prediction)
 
     def test_json_fragment_fails(self):
         from fair_prompt_optimizer.metrics import json_format_compliance
@@ -310,7 +316,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response='{"thought": "I calculated", "action": {...}}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_truncated_json_fails(self):
         from fair_prompt_optimizer.metrics import json_format_compliance
@@ -318,7 +324,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response='{"thought": "incomplete')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_react_response_leaked_fails(self):
         from fair_prompt_optimizer.metrics import json_format_compliance
@@ -326,7 +332,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="42")
         prediction = MockPrediction(response='{"thought": "My thought here", "answer": 42}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_tool_name_fragment_fails(self):
         from fair_prompt_optimizer.metrics import json_format_compliance
@@ -334,7 +340,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="result")
         prediction = MockPrediction(response='"tool_name": "calculator", "tool_input": "5+5"')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_kv_format_multiple_patterns_fails(self):
         """Test that SimpleReActPlanner KV format leakage is detected."""
@@ -346,7 +352,7 @@ class TestJsonFormatCompliance:
             response="Thought: I need to calculate this\nAction:\ntool_name: calculator\ntool_input: 5+5"
         )
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_kv_format_starts_with_thought_fails(self):
         """Response starting with 'Thought:' is suspicious."""
@@ -355,7 +361,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="Thought: The answer appears to be 42")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_kv_format_starts_with_action_fails(self):
         """Response starting with 'Action:' is suspicious."""
@@ -364,7 +370,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="Action: Using the calculator tool")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_unbalanced_braces_fails(self):
         """Unbalanced braces indicate truncated JSON."""
@@ -373,7 +379,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="Here is some data: { key: value, nested: { inner")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_unbalanced_brackets_fails(self):
         """Unbalanced brackets indicate truncated structure."""
@@ -382,7 +388,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response="Array: [1, 2, 3, [4, 5")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_final_answer_fragment_fails(self):
         """Detection of 'final_answer' in quotes indicates JSON leak."""
@@ -391,7 +397,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='"final_answer": "The result is 42"')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_single_kv_pattern_passes(self):
         """Single KV pattern word in natural text should pass."""
@@ -402,7 +408,7 @@ class TestJsonFormatCompliance:
         prediction = MockPrediction(response="The recommended action is to proceed carefully.")
 
         # This passes because it doesn't start with "action:" and only has 1 pattern
-        assert json_format_compliance(example, prediction) == True
+        assert json_format_compliance(example, prediction)
 
     def test_unquoted_json_fails(self):
         """JSON without proper quotes should fail."""
@@ -411,7 +417,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='{thought: "I need to calculate", action: {...}}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_typo_in_react_key_fails(self):
         """Common typos in ReAct keys should be detected."""
@@ -420,7 +426,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='{"thougth": "calculating...", "action": {}}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_markdown_json_block_fails(self):
         """Markdown code blocks with JSON should fail."""
@@ -429,7 +435,7 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='```json\n{"thought": "test"}\n```')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_json_announcement_fails(self):
         """Model announcing JSON output should fail."""
@@ -438,16 +444,16 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='Here is the JSON response: {"result": 42}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_observation_pattern_fails(self):
         """Observation: pattern should fail (ReAct component)."""
         from fair_prompt_optimizer.metrics import json_format_compliance
 
         example = MockExample(expected_output="")
-        prediction = MockPrediction(response='Thought: analyzing\nObservation: the result is 42')
+        prediction = MockPrediction(response="Thought: analyzing\nObservation: the result is 42")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_json_starting_with_tool_fails(self):
         """JSON starting with { containing tool reference should fail."""
@@ -456,16 +462,16 @@ class TestJsonFormatCompliance:
         example = MockExample(expected_output="")
         prediction = MockPrediction(response='{"name": "calculator", "input": "5+5"}')
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
     def test_balanced_json_with_colon_fails(self):
         """Balanced JSON-like structure with key:value should fail."""
         from fair_prompt_optimizer.metrics import json_format_compliance
 
         example = MockExample(expected_output="")
-        prediction = MockPrediction(response='{result: 42}')
+        prediction = MockPrediction(response="{result: 42}")
 
-        assert json_format_compliance(example, prediction) == False
+        assert not json_format_compliance(example, prediction)
 
 
 class TestFormatComplianceScore:
@@ -483,7 +489,9 @@ class TestFormatComplianceScore:
         from fair_prompt_optimizer.metrics import format_compliance_score
 
         example = MockExample(expected_output="")
-        prediction = MockPrediction(response='{"thought": "calculating", "action": {"tool_name": "calc"}}')
+        prediction = MockPrediction(
+            response='{"thought": "calculating", "action": {"tool_name": "calc"}}'
+        )
 
         assert format_compliance_score(example, prediction) == 0.0
 
@@ -702,14 +710,10 @@ class TestCombinedMetricWeights:
     """Test combined_metric with various weight configurations."""
 
     def test_unequal_weights(self):
-        from fair_prompt_optimizer.metrics import combined_metric, exact_match, contains_answer
+        from fair_prompt_optimizer.metrics import combined_metric, contains_answer, exact_match
 
         # Weight exact_match heavily
-        metric = combined_metric(
-            exact_match,
-            contains_answer,
-            weights=[0.8, 0.2]
-        )
+        metric = combined_metric(exact_match, contains_answer, weights=[0.8, 0.2])
 
         example = MockExample(expected_output="42")
         # Exact match fails, contains passes
@@ -719,14 +723,10 @@ class TestCombinedMetricWeights:
         assert score == pytest.approx(0.2)  # Only contains_answer passes
 
     def test_weight_validation(self):
-        from fair_prompt_optimizer.metrics import combined_metric, exact_match, contains_answer
+        from fair_prompt_optimizer.metrics import combined_metric, contains_answer, exact_match
 
         with pytest.raises(ValueError, match="weights must match"):
-            combined_metric(
-                exact_match,
-                contains_answer,
-                weights=[0.5]  # Wrong number of weights
-            )
+            combined_metric(exact_match, contains_answer, weights=[0.5])  # Wrong number of weights
 
 
 class TestCreateMetricWithContains:
@@ -741,8 +741,8 @@ class TestCreateMetricWithContains:
         good = MockPrediction(response="Operation was a success!")
         bad = MockPrediction(response="Operation failed")
 
-        assert metric(example, good) == True
-        assert metric(example, bad) == False
+        assert metric(example, good)
+        assert not metric(example, bad)
 
 
 class TestNegativeNumbers:
@@ -754,7 +754,7 @@ class TestNegativeNumbers:
         example = MockExample(expected_output="-42")
         prediction = MockPrediction(response="The result is -42")
 
-        assert numeric_accuracy(example, prediction) == True
+        assert numeric_accuracy(example, prediction)
 
     def test_numeric_accuracy_negative_tolerance(self):
         from fair_prompt_optimizer.metrics import numeric_accuracy
@@ -762,8 +762,8 @@ class TestNegativeNumbers:
         example = MockExample(expected_output="-10.0")
         prediction = MockPrediction(response="-10.05")
 
-        assert numeric_accuracy(example, prediction, tolerance=0.1) == True
-        assert numeric_accuracy(example, prediction, tolerance=0.01) == False
+        assert numeric_accuracy(example, prediction, tolerance=0.1)
+        assert not numeric_accuracy(example, prediction, tolerance=0.01)
 
 
 if __name__ == "__main__":

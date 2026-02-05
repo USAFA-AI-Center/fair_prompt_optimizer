@@ -9,12 +9,12 @@ This module contains:
 - Memory management utilities
 """
 
-import re
 import asyncio
 import gc
 import logging
+import re
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from ..config import OptimizedPrompts
 
@@ -49,7 +49,7 @@ def combine_prompt_components(
         parts.append(f"{FORMAT_START}")
         for instruction in format_instructions:
             if isinstance(instruction, dict):
-                text = instruction.get('text', instruction.get('content', str(instruction)))
+                text = instruction.get("text", instruction.get("content", str(instruction)))
             else:
                 text = str(instruction)
             parts.append(f"{FORMAT_ITEM_START}")
@@ -78,7 +78,7 @@ def parse_optimized_prompt(
 
     if role_match:
         result.role_definition = role_match.group(1).strip()
-        result.role_definition_changed = (result.role_definition != original_role.strip())
+        result.role_definition_changed = result.role_definition != original_role.strip()
     else:
         # Fallback - keep original
         result.role_definition = original_role
@@ -87,25 +87,27 @@ def parse_optimized_prompt(
 
     # Parse format instructions
     format_match = re.search(
-        f"{re.escape(FORMAT_START)}\\s*(.+?)\\s*{re.escape(FORMAT_END)}",
-        optimized_text,
-        re.DOTALL
+        f"{re.escape(FORMAT_START)}\\s*(.+?)\\s*{re.escape(FORMAT_END)}", optimized_text, re.DOTALL
     )
     if format_match:
         format_content = format_match.group(1)
         items = re.findall(
             f"{re.escape(FORMAT_ITEM_START)}\\s*(.+?)\\s*{re.escape(FORMAT_ITEM_END)}",
             format_content,
-            re.DOTALL
+            re.DOTALL,
         )
         if items:
             result.format_instructions = [item.strip() for item in items]
             if original_format_instructions:
                 original_texts = [
-                    (fi.get('text', fi.get('content', str(fi))) if isinstance(fi, dict) else str(fi)).strip()
+                    (
+                        fi.get("text", fi.get("content", str(fi)))
+                        if isinstance(fi, dict)
+                        else str(fi)
+                    ).strip()
                     for fi in original_format_instructions
                 ]
-                result.format_instructions_changed = (result.format_instructions != original_texts)
+                result.format_instructions_changed = result.format_instructions != original_texts
             else:
                 result.format_instructions_changed = True
     else:
@@ -123,7 +125,7 @@ def run_async(coro):
     Handles the case where we might already be in an async context.
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         with ThreadPoolExecutor() as pool:
             future = pool.submit(asyncio.run, coro)
             return future.result()
@@ -137,6 +139,7 @@ def clear_cuda_memory():
     gc.collect()
     try:
         import torch
+
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
     except ImportError:

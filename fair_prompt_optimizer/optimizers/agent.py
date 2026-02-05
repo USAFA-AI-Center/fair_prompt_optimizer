@@ -11,26 +11,25 @@ its prompts while running the full agent pipeline.
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Literal, Optional
+from typing import Callable, Dict, List, Literal, Optional
 
 import dspy
+from fairlib.core.prompts import PromptBuilder
+from fairlib.modules.agent.simple_agent import SimpleAgent
 
 from ..config import (
+    DSPyTranslator,
     OptimizedConfig,
     OptimizedPrompts,
     TrainingExample,
-    DSPyTranslator,
     compute_file_hash,
 )
 from .base import (
-    run_async,
     clear_cuda_memory,
     combine_prompt_components,
     parse_optimized_prompt,
+    run_async,
 )
-
-from fairlib.modules.agent.simple_agent import SimpleAgent
-from fairlib.core.prompts import PromptBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,9 @@ class AgentModule(dspy.Module):
     (Thought → Action → Observation cycles) is internal.
     """
 
-    def __init__(self, agent: 'SimpleAgent', input_field: str = "user_input", output_field: str = "response"):
+    def __init__(
+        self, agent: "SimpleAgent", input_field: str = "user_input", output_field: str = "response"
+    ):
         """
         Initialize the Agent module.
 
@@ -72,7 +73,7 @@ class AgentModule(dspy.Module):
         # Extract role definition
         try:
             role_def = self.agent.planner.prompt_builder.role_definition
-            self._initial_role = role_def.text if hasattr(role_def, 'text') else str(role_def)
+            self._initial_role = role_def.text if hasattr(role_def, "text") else str(role_def)
         except AttributeError:
             self._initial_role = "Complete the given task."
             logger.warning("Could not extract role_definition from agent, using default")
@@ -82,9 +83,9 @@ class AgentModule(dspy.Module):
             format_instructions = self.agent.planner.prompt_builder.format_instructions
             self._initial_format_instructions = []
             for fi in format_instructions:
-                if hasattr(fi, 'text'):
+                if hasattr(fi, "text"):
                     self._initial_format_instructions.append(fi.text)
-                elif hasattr(fi, 'content'):
+                elif hasattr(fi, "content"):
                     self._initial_format_instructions.append(fi.content)
                 else:
                     self._initial_format_instructions.append(str(fi))
@@ -95,7 +96,7 @@ class AgentModule(dspy.Module):
         # Extract model info
         try:
             llm = self.agent.llm
-            self._model_name = getattr(llm, 'model_name', getattr(llm, 'model', 'unknown'))
+            self._model_name = getattr(llm, "model_name", getattr(llm, "model", "unknown"))
             self._adapter_type = type(llm).__name__
         except AttributeError:
             self._model_name = "unknown"
@@ -106,7 +107,7 @@ class AgentModule(dspy.Module):
         try:
             self._agent_type = type(self.agent).__name__
             self._planner_type = type(self.agent.planner).__name__
-            self._max_steps = getattr(self.agent, 'max_steps', 10)
+            self._max_steps = getattr(self.agent, "max_steps", 10)
         except AttributeError:
             self._agent_type = "SimpleAgent"
             self._planner_type = "SimpleReActPlanner"
@@ -158,7 +159,7 @@ class AgentModule(dspy.Module):
 
         return dspy.Prediction(**{self.output_field: result})
 
-    def get_prompt_builder(self) -> Optional['PromptBuilder']:
+    def get_prompt_builder(self) -> Optional["PromptBuilder"]:
         """Get the agent's PromptBuilder."""
         try:
             return self.agent.planner.prompt_builder
@@ -181,7 +182,7 @@ class AgentModule(dspy.Module):
         (role_definition, format_instructions) using section markers.
         """
         optimized_text = None
-        if hasattr(self.predict, 'signature') and hasattr(self.predict.signature, 'instructions'):
+        if hasattr(self.predict, "signature") and hasattr(self.predict.signature, "instructions"):
             if self.predict.signature.instructions:
                 optimized_text = self.predict.signature.instructions
 
@@ -209,9 +210,9 @@ class AgentModule(dspy.Module):
     def get_demos(self) -> List[Dict[str, str]]:
         """Extract demos from the predict object."""
         demos = []
-        if hasattr(self.predict, 'demos') and self.predict.demos:
+        if hasattr(self.predict, "demos") and self.predict.demos:
             for demo in self.predict.demos:
-                demo_dict = dict(demo) if hasattr(demo, '_store') else demo
+                demo_dict = dict(demo) if hasattr(demo, "_store") else demo
                 demos.append(demo_dict)
         return demos
 
@@ -224,7 +225,7 @@ class AgentOptimizer:
     running the full agent pipeline with tools.
     """
 
-    def __init__(self, agent: 'SimpleAgent', config: Optional[OptimizedConfig] = None):
+    def __init__(self, agent: "SimpleAgent", config: Optional[OptimizedConfig] = None):
         """
         Initialize the Agent optimizer.
 
@@ -237,7 +238,7 @@ class AgentOptimizer:
         self._module = None
 
     @classmethod
-    def from_config_file(cls, path: str, llm) -> 'AgentOptimizer':
+    def from_config_file(cls, path: str, llm) -> "AgentOptimizer":
         """Create optimizer by loading config file."""
         from fairlib.utils.config_manager import load_agent
 
@@ -252,7 +253,7 @@ class AgentOptimizer:
         optimizer: str = "bootstrap",
         max_bootstrapped_demos: int = 4,
         max_labeled_demos: int = 4,
-        mipro_auto: Literal['light', 'medium', 'heavy'] = 'light',
+        mipro_auto: Literal["light", "medium", "heavy"] = "light",
         training_data_path: Optional[str] = None,
         dspy_lm=None,
     ) -> OptimizedConfig:
@@ -313,7 +314,9 @@ class AgentOptimizer:
             format_instructions_changed=False,
         )
 
-        logger.info(f"Running bootstrap to select full_trace examples ({len(training_examples)} candidates)")
+        logger.info(
+            f"Running bootstrap to select full_trace examples ({len(training_examples)} candidates)"
+        )
         # Run Bootstrap optimization
         examples = self._run_bootstrap(
             training_examples,
@@ -328,8 +331,7 @@ class AgentOptimizer:
                 optimized_prompts = self._optimize_instructions_mipro(
                     training_examples, metric, dspy_lm, mipro_auto, max_labeled_demos
                 )
-            except Exception as e:
-                new_role = old_role
+            except Exception:
                 logger.error("Encountered error in MIRPOv2 optimization, using old role definition")
 
         # Update config
@@ -337,7 +339,9 @@ class AgentOptimizer:
             self.config.role_definition = optimized_prompts.role_definition
 
         if optimized_prompts.format_instructions_changed and optimized_prompts.format_instructions:
-            self.config.config["prompts"]["format_instructions"] = optimized_prompts.format_instructions
+            self.config.config["prompts"][
+                "format_instructions"
+            ] = optimized_prompts.format_instructions
 
         if examples:
             current_examples = list(self.config.examples)
@@ -347,9 +351,11 @@ class AgentOptimizer:
         # Record provenance
         self.config.optimization.record_run(
             optimizer=optimizer,
-            metric=metric.__name__ if hasattr(metric, '__name__') else str(metric),
+            metric=metric.__name__ if hasattr(metric, "__name__") else str(metric),
             training_data_path=training_data_path,
-            training_data_hash=compute_file_hash(training_data_path) if training_data_path else None,
+            training_data_hash=(
+                compute_file_hash(training_data_path) if training_data_path else None
+            ),
             num_examples=len(training_examples),
             examples_before=examples_before,
             examples_after=len(self.config.examples),
@@ -362,10 +368,14 @@ class AgentOptimizer:
             },
         )
 
-        logger.info(f"Optimization complete. Examples: {examples_before} → {len(self.config.examples)}")
+        logger.info(
+            f"Optimization complete. Examples: {examples_before} → {len(self.config.examples)}"
+        )
         if optimizer == "mipro":
             logger.info(f"Role definition changed: {optimized_prompts.role_definition_changed}")
-            logger.info(f"Format instructions changed: {optimized_prompts.format_instructions_changed}")
+            logger.info(
+                f"Format instructions changed: {optimized_prompts.format_instructions_changed}"
+            )
 
         return self.config
 
@@ -390,7 +400,7 @@ class AgentOptimizer:
             if len(selected) >= max_demos:
                 break
 
-            user_input = ex.inputs.get('user_input', '')
+            user_input = ex.inputs.get("user_input", "")
 
             try:
                 # Run the agent
@@ -401,7 +411,7 @@ class AgentOptimizer:
                 dspy_example = dspy.Example(
                     user_input=user_input,
                     expected_output=ex.expected_output,
-                ).with_inputs('user_input')
+                ).with_inputs("user_input")
 
                 # Check metric
                 score = metric(dspy_example, prediction, None)
@@ -411,14 +421,18 @@ class AgentOptimizer:
                         selected.append(ex.full_trace)
                         logger.info(f"Passed (full_trace): {user_input[:40]}...")
                     else:
-                        logger.warning(f"Passed but NO full_trace, training data must include a full trace example: {user_input[:40]}...")
+                        logger.warning(
+                            f"Passed but NO full_trace, training data must include a full trace example: {user_input[:40]}..."
+                        )
                 else:
                     logger.debug(f"Failed metric: {user_input[:40]}...")
 
             except Exception as e:
                 logger.warning(f"Agent failed on '{user_input[:30]}...': {e}")
 
-        logger.info(f"Bootstrap selected {len(selected)}/{min(len(training_examples), max_demos)} examples")
+        logger.info(
+            f"Bootstrap selected {len(selected)}/{min(len(training_examples), max_demos)} examples"
+        )
         return selected
 
     def _optimize_instructions_mipro(
@@ -447,7 +461,9 @@ class AgentOptimizer:
         dspy.configure(lm=dspy_lm)
 
         module = AgentModule(self.agent)
-        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
+        translator = DSPyTranslator(
+            input_field=module.input_field, output_field=module.output_field
+        )
         dspy_examples = translator.to_dspy_examples(training_examples)
 
         try:
@@ -462,9 +478,11 @@ class AgentOptimizer:
             # Get all optimized prompt components
             optimized_prompts = optimized.get_optimized_prompts()
 
-            logger.info(f"MIPRO optimization complete:")
+            logger.info("MIPRO optimization complete:")
             logger.info(f"  - role_definition changed: {optimized_prompts.role_definition_changed}")
-            logger.info(f"  - format_instructions changed: {optimized_prompts.format_instructions_changed}")
+            logger.info(
+                f"  - format_instructions changed: {optimized_prompts.format_instructions_changed}"
+            )
 
             return optimized_prompts
 

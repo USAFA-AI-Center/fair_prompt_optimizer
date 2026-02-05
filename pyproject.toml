@@ -70,6 +70,13 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+ignore = [
+    "W291",  # trailing whitespace
+    "W293",  # blank line contains whitespace
+    "E501",  # line too long (handled by formatter)
+    "E712",  # comparison to True/False (stylistic)
+    "F401",  # imported but unused (needed for re-exports in __init__.py)
+]
 
 [tool.black]
 line-length = 100

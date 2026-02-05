@@ -14,17 +14,16 @@ import logging
 from typing import Any, Callable, Dict, List, Literal, Optional
 
 import dspy
+from fairlib.core.prompts import PromptBuilder
+from fairlib.modules.agent.multi_agent_runner import HierarchicalAgentRunner
 
 from ..config import (
+    DSPyTranslator,
     OptimizedConfig,
     TrainingExample,
-    DSPyTranslator,
     compute_file_hash,
 )
-from .base import run_async, clear_cuda_memory
-
-from fairlib.modules.agent.multi_agent_runner import HierarchicalAgentRunner
-from fairlib.core.prompts import PromptBuilder
+from .base import clear_cuda_memory, run_async
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,12 @@ class MultiAgentModule(dspy.Module):
     (manager delegating to workers) is internal.
     """
 
-    def __init__(self, runner: 'HierarchicalAgentRunner', input_field: str = "user_input", output_field: str = "response"):
+    def __init__(
+        self,
+        runner: "HierarchicalAgentRunner",
+        input_field: str = "user_input",
+        output_field: str = "response",
+    ):
         """
         Initialize the MultiAgent module.
 
@@ -67,7 +71,7 @@ class MultiAgentModule(dspy.Module):
         try:
             manager = self.runner.manager
             role_def = manager.planner.prompt_builder.role_definition
-            self._manager_role = role_def.text if hasattr(role_def, 'text') else str(role_def)
+            self._manager_role = role_def.text if hasattr(role_def, "text") else str(role_def)
         except AttributeError:
             self._manager_role = "Coordinate workers to complete the task."
             logger.warning("Could not extract manager role, using default")
@@ -77,7 +81,9 @@ class MultiAgentModule(dspy.Module):
         try:
             for name, worker in self.runner.workers.items():
                 role_def = worker.planner.prompt_builder.role_definition
-                self._worker_roles[name] = role_def.text if hasattr(role_def, 'text') else str(role_def)
+                self._worker_roles[name] = (
+                    role_def.text if hasattr(role_def, "text") else str(role_def)
+                )
         except AttributeError:
             logger.warning("Could not extract worker roles")
 
@@ -120,23 +126,23 @@ class MultiAgentModule(dspy.Module):
         # Extract string result
         if isinstance(result, str):
             response = result
-        elif hasattr(result, 'text'):
+        elif hasattr(result, "text"):
             response = result.text
-        elif hasattr(result, 'content'):
+        elif hasattr(result, "content"):
             response = result.content
         else:
             response = str(result)
 
         return dspy.Prediction(**{self.output_field: response})
 
-    def get_manager_builder(self) -> Optional['PromptBuilder']:
+    def get_manager_builder(self) -> Optional["PromptBuilder"]:
         """Get the manager's PromptBuilder."""
         try:
             return self.runner.manager.planner.prompt_builder
         except AttributeError:
             return None
 
-    def get_worker_builders(self) -> Dict[str, 'PromptBuilder']:
+    def get_worker_builders(self) -> Dict[str, "PromptBuilder"]:
         """Get PromptBuilders for all workers."""
         builders = {}
         try:
@@ -148,7 +154,7 @@ class MultiAgentModule(dspy.Module):
 
     def get_optimized_manager_role(self) -> str:
         """Get the optimized manager role (instructions) if available."""
-        if hasattr(self.predict, 'signature') and hasattr(self.predict.signature, 'instructions'):
+        if hasattr(self.predict, "signature") and hasattr(self.predict.signature, "instructions"):
             if self.predict.signature.instructions:
                 return self.predict.signature.instructions
         return self._manager_role
@@ -156,9 +162,9 @@ class MultiAgentModule(dspy.Module):
     def get_demos(self) -> List[Dict[str, str]]:
         """Extract demos from the predict object."""
         demos = []
-        if hasattr(self.predict, 'demos') and self.predict.demos:
+        if hasattr(self.predict, "demos") and self.predict.demos:
             for demo in self.predict.demos:
-                demo_dict = dict(demo) if hasattr(demo, '_store') else demo
+                demo_dict = dict(demo) if hasattr(demo, "_store") else demo
                 demos.append(demo_dict)
         return demos
 
@@ -173,7 +179,7 @@ class MultiAgentOptimizer:
 
     def __init__(
         self,
-        runner: 'HierarchicalAgentRunner',
+        runner: "HierarchicalAgentRunner",
         config: Optional[OptimizedConfig] = None,
         optimize_manager: bool = True,
         optimize_workers: bool = False,
@@ -196,6 +202,7 @@ class MultiAgentOptimizer:
             self.config = config
         else:
             from ..config import extract_multi_agent_config
+
             config_dict = extract_multi_agent_config(runner)
             self.config = OptimizedConfig(config=config_dict)
 
@@ -210,7 +217,7 @@ class MultiAgentOptimizer:
         optimizer: str = "bootstrap",
         max_bootstrapped_demos: int = 4,
         max_labeled_demos: int = 4,
-        mipro_auto: Literal['light', 'medium', 'heavy'] = 'light',
+        mipro_auto: Literal["light", "medium", "heavy"] = "light",
         training_data_path: Optional[str] = None,
         dspy_lm=None,
         optimize_manager: Optional[bool] = None,
@@ -268,9 +275,7 @@ class MultiAgentOptimizer:
         # Check for full_trace (required for multi-agent)
         has_full_trace = any(ex.full_trace for ex in training_examples)
         if not has_full_trace:
-            logger.warning(
-                "Multi-agent optimization requires full_trace in training examples."
-            )
+            logger.warning("Multi-agent optimization requires full_trace in training examples.")
 
         # Track starting state
         manager_prompts = self.config.config.get("manager", {}).get("prompts", {})
@@ -279,7 +284,9 @@ class MultiAgentOptimizer:
         new_role = old_role
 
         # Run Bootstrap optimization
-        logger.info(f"Running bootstrap to select full_trace examples ({len(training_examples)} candidates)")
+        logger.info(
+            f"Running bootstrap to select full_trace examples ({len(training_examples)} candidates)"
+        )
         examples = self._run_bootstrap(
             training_examples,
             metric,
@@ -335,13 +342,17 @@ class MultiAgentOptimizer:
             logger.info(f"Workers optimized: {workers_optimized}")
 
         # Record provenance
-        examples_after = len(self.config.config.get("manager", {}).get("prompts", {}).get("examples", []))
+        examples_after = len(
+            self.config.config.get("manager", {}).get("prompts", {}).get("examples", [])
+        )
 
         self.config.optimization.record_run(
             optimizer=optimizer,
-            metric=metric.__name__ if hasattr(metric, '__name__') else str(metric),
+            metric=metric.__name__ if hasattr(metric, "__name__") else str(metric),
             training_data_path=training_data_path,
-            training_data_hash=compute_file_hash(training_data_path) if training_data_path else None,
+            training_data_hash=(
+                compute_file_hash(training_data_path) if training_data_path else None
+            ),
             num_examples=len(training_examples),
             examples_before=examples_before,
             examples_after=examples_after,
@@ -356,7 +367,9 @@ class MultiAgentOptimizer:
             },
         )
 
-        logger.info(f"Manager optimization complete. Examples: {examples_before} → {examples_after}")
+        logger.info(
+            f"Manager optimization complete. Examples: {examples_before} → {examples_after}"
+        )
         if optimizer == "mipro":
             logger.info(f"Manager role definition changed: {new_role != old_role}")
         if workers_optimized:
@@ -397,12 +410,16 @@ class MultiAgentOptimizer:
 
         for worker_name, worker in self.runner.workers.items():
             if worker_name not in worker_training_examples:
-                logger.warning(f"No training data for worker '{worker_name}', skipping optimization")
+                logger.warning(
+                    f"No training data for worker '{worker_name}', skipping optimization"
+                )
                 continue
 
             examples = worker_training_examples[worker_name]
             if not examples:
-                logger.warning(f"Empty training data for worker '{worker_name}', skipping optimization")
+                logger.warning(
+                    f"Empty training data for worker '{worker_name}', skipping optimization"
+                )
                 continue
 
             logger.info(f"Optimizing worker: {worker_name} ({len(examples)} examples)")
@@ -428,7 +445,9 @@ class MultiAgentOptimizer:
 
                 # Store the optimized config dict
                 optimized_workers[worker_name] = worker_config.to_dict()
-                logger.info(f"Worker '{worker_name}' optimization complete: {len(worker_config.examples)} examples")
+                logger.info(
+                    f"Worker '{worker_name}' optimization complete: {len(worker_config.examples)} examples"
+                )
 
             except Exception as e:
                 logger.error(f"Failed to optimize worker '{worker_name}': {e}")
@@ -454,7 +473,7 @@ class MultiAgentOptimizer:
             if len(selected) >= max_demos:
                 break
 
-            user_input = ex.inputs.get('user_input', '')
+            user_input = ex.inputs.get("user_input", "")
 
             try:
                 # Run the full multi-agent system
@@ -465,7 +484,7 @@ class MultiAgentOptimizer:
                 dspy_example = dspy.Example(
                     user_input=user_input,
                     response=ex.expected_output,
-                ).with_inputs('user_input')
+                ).with_inputs("user_input")
 
                 score = metric(dspy_example, prediction, None)
 
@@ -481,7 +500,9 @@ class MultiAgentOptimizer:
             except Exception as e:
                 logger.warning(f"Multi-agent failed on '{user_input[:30]}...': {e}")
 
-        logger.info(f"Bootstrap selected {len(selected)}/{min(len(training_examples), max_demos)} examples")
+        logger.info(
+            f"Bootstrap selected {len(selected)}/{min(len(training_examples), max_demos)} examples"
+        )
         return selected
 
     def _optimize_instructions_mipro(
@@ -501,7 +522,9 @@ class MultiAgentOptimizer:
         dspy.configure(lm=dspy_lm)
 
         module = MultiAgentModule(self.runner)
-        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
+        translator = DSPyTranslator(
+            input_field=module.input_field, output_field=module.output_field
+        )
         dspy_examples = translator.to_dspy_examples(training_examples)
 
         try:
@@ -513,11 +536,13 @@ class MultiAgentOptimizer:
                 requires_permission_to_run=False,
             )
             new_role = optimized.get_optimized_manager_role()
-            logger.info(f"MIPRO optimized manager role definition")
+            logger.info("MIPRO optimized manager role definition")
             return new_role
         except Exception as e:
             logger.warning(f"MIPRO instruction optimization failed: {e}")
-            return self.config.config.get("manager", {}).get("prompts", {}).get("role_definition", "")
+            return (
+                self.config.config.get("manager", {}).get("prompts", {}).get("role_definition", "")
+            )
 
     def test(self, user_input: str) -> str:
         """Run a test input through the multi-agent system."""

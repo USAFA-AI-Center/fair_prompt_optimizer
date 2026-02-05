@@ -14,39 +14,41 @@ import pytest
 
 class TestPromptsData:
     """Test PromptsData serialization."""
-    
+
     def test_to_dict_empty(self):
         from fair_prompt_optimizer.config import OptimizedConfig
-        
+
         config = OptimizedConfig()
         data = config.to_dict()
-        
+
         assert "prompts" not in data or data.get("prompts") == {}
         assert "optimization" in data
-    
+
     def test_to_dict_with_prompts(self):
         from fair_prompt_optimizer.config import OptimizedConfig
-        
-        config = OptimizedConfig(config={
-            "version": "1.0",
-            "type": "agent",
-            "prompts": {
-                "role_definition": "You are a helper.",
-                "tool_instructions": [{"name": "calc", "description": "Does math"}],
-                "format_instructions": ["Be concise"],
-                "examples": ["Example 1"],
+
+        config = OptimizedConfig(
+            config={
+                "version": "1.0",
+                "type": "agent",
+                "prompts": {
+                    "role_definition": "You are a helper.",
+                    "tool_instructions": [{"name": "calc", "description": "Does math"}],
+                    "format_instructions": ["Be concise"],
+                    "examples": ["Example 1"],
+                },
             }
-        })
-        
+        )
+
         data = config.to_dict()
-        
+
         assert data["prompts"]["role_definition"] == "You are a helper."
         assert len(data["prompts"]["tool_instructions"]) == 1
         assert len(data["prompts"]["examples"]) == 1
-    
+
     def test_round_trip(self):
         from fair_prompt_optimizer.config import OptimizedConfig
-        
+
         original = {
             "version": "1.0",
             "type": "agent",
@@ -60,26 +62,26 @@ class TestPromptsData:
             "model": {"adapter": "TestAdapter", "model_name": "test-model"},
             "agent": {"planner_type": "TestPlanner", "tools": [], "max_steps": 5},
         }
-        
+
         config = OptimizedConfig.from_dict(original)
         restored = config.to_dict()
-        
+
         # Remove optimization for comparison (it's added)
         del restored["optimization"]
-        
+
         assert restored == original
 
 
 class TestOptimizationProvenance:
     """Test optimization provenance tracking."""
-    
+
     def test_record_run(self):
         from fair_prompt_optimizer.config import OptimizationProvenance
-        
+
         prov = OptimizationProvenance()
-        assert prov.optimized == False
+        assert not prov.optimized
         assert len(prov.runs) == 0
-        
+
         prov.record_run(
             optimizer="bootstrap",
             metric="accuracy",
@@ -87,35 +89,35 @@ class TestOptimizationProvenance:
             examples_before=0,
             examples_after=3,
         )
-        
-        assert prov.optimized == True
+
+        assert prov.optimized
         assert prov.optimizer == "bootstrap"
         assert prov.metric == "accuracy"
         assert len(prov.runs) == 1
         assert prov.runs[0].examples_before == 0
         assert prov.runs[0].examples_after == 3
-    
+
     def test_multiple_runs(self):
         from fair_prompt_optimizer.config import OptimizationProvenance
-        
+
         prov = OptimizationProvenance()
-        
+
         prov.record_run(optimizer="bootstrap", metric="accuracy", num_examples=10)
         prov.record_run(optimizer="mipro", metric="f1", num_examples=20)
-        
+
         assert len(prov.runs) == 2
         assert prov.optimizer == "mipro"  # Most recent
         assert prov.metric == "f1"
-    
+
     def test_serialization(self):
         from fair_prompt_optimizer.config import OptimizationProvenance
-        
+
         prov = OptimizationProvenance()
         prov.record_run(optimizer="bootstrap", metric="accuracy", num_examples=10)
-        
+
         data = prov.to_dict()
         restored = OptimizationProvenance.from_dict(data)
-        
+
         assert restored.optimized == prov.optimized
         assert restored.optimizer == prov.optimizer
         assert len(restored.runs) == len(prov.runs)
@@ -123,43 +125,45 @@ class TestOptimizationProvenance:
 
 class TestConfigIO:
     """Test config file I/O."""
-    
+
     def test_save_and_load(self):
         from fair_prompt_optimizer.config import (
             OptimizedConfig,
-            save_optimized_config,
             load_optimized_config,
+            save_optimized_config,
         )
-        
-        config = OptimizedConfig(config={
-            "version": "1.0",
-            "type": "agent",
-            "prompts": {
-                "role_definition": "Test",
-                "examples": ["ex1", "ex2"],
+
+        config = OptimizedConfig(
+            config={
+                "version": "1.0",
+                "type": "agent",
+                "prompts": {
+                    "role_definition": "Test",
+                    "examples": ["ex1", "ex2"],
+                },
             }
-        })
+        )
         config.optimization.record_run(
             optimizer="bootstrap",
             metric="test_metric",
             num_examples=5,
         )
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "test_config.json"
             save_optimized_config(config, str(path))
-            
+
             loaded = load_optimized_config(str(path))
-            
+
             assert loaded.prompts["role_definition"] == "Test"
             assert len(loaded.prompts["examples"]) == 2
-            assert loaded.optimization.optimized == True
+            assert loaded.optimization.optimized
             assert loaded.optimization.optimizer == "bootstrap"
-    
+
     def test_load_fairlib_config(self):
         """Test loading a config without optimization section (from fairlib)."""
         from fair_prompt_optimizer.config import load_optimized_config
-        
+
         fairlib_config = {
             "version": "1.0",
             "type": "agent",
@@ -170,42 +174,42 @@ class TestConfigIO:
             "model": {"adapter": "Test", "model_name": "test"},
             "agent": {"planner_type": "Test", "tools": []},
         }
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "fairlib_config.json"
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 json.dump(fairlib_config, f)
-            
+
             loaded = load_optimized_config(str(path))
-            
+
             assert loaded.prompts["role_definition"] == "From fairlib"
-            assert loaded.optimization.optimized == False  # No optimization yet
+            assert not loaded.optimization.optimized  # No optimization yet
 
 
 class TestTrainingExamples:
     """Test training examples I/O."""
-    
+
     def test_load_examples(self):
-        from fair_prompt_optimizer.config import load_training_examples, TrainingExample
-        
+        from fair_prompt_optimizer.config import load_training_examples
+
         examples_data = [
             {"inputs": {"user_input": "Hello"}, "expected_output": "Hi"},
             {"inputs": {"user_input": "2+2"}, "expected_output": "4"},
         ]
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "examples.json"
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 json.dump(examples_data, f)
-            
+
             examples = load_training_examples(str(path))
-            
+
             assert len(examples) == 2
             assert examples[0].inputs["user_input"] == "Hello"
             assert examples[1].expected_output == "4"
-    
+
     def test_dspy_translation(self):
-        from fair_prompt_optimizer.config import TrainingExample, DSPyTranslator
+        from fair_prompt_optimizer.config import DSPyTranslator, TrainingExample
 
         examples = [
             TrainingExample(inputs={"user_input": "Test"}, expected_output="Result"),
@@ -220,7 +224,7 @@ class TestTrainingExamples:
         assert dspy_examples[0].expected_output == "Result"
 
     def test_dspy_translation_custom_fields(self):
-        from fair_prompt_optimizer.config import TrainingExample, DSPyTranslator
+        from fair_prompt_optimizer.config import DSPyTranslator, TrainingExample
 
         examples = [
             TrainingExample(inputs={"query": "Test query"}, expected_output="Result"),
@@ -236,35 +240,35 @@ class TestTrainingExamples:
 
 class TestFileHash:
     """Test file hashing for provenance."""
-    
+
     def test_compute_hash(self):
         from fair_prompt_optimizer.config import compute_file_hash
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "test.json"
-            with open(path, 'w') as f:
+            with open(path, "w") as f:
                 f.write('{"test": "data"}')
-            
+
             hash1 = compute_file_hash(str(path))
             hash2 = compute_file_hash(str(path))
-            
+
             assert hash1 == hash2
             assert hash1.startswith("sha256:")
-    
+
     def test_hash_changes_with_content(self):
         from fair_prompt_optimizer.config import compute_file_hash
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "test.json"
-            
-            with open(path, 'w') as f:
+
+            with open(path, "w") as f:
                 f.write('{"version": 1}')
             hash1 = compute_file_hash(str(path))
-            
-            with open(path, 'w') as f:
+
+            with open(path, "w") as f:
                 f.write('{"version": 2}')
             hash2 = compute_file_hash(str(path))
-            
+
             assert hash1 != hash2
 
 
@@ -302,9 +306,7 @@ class TestOptimizedConfigAccessors:
         from fair_prompt_optimizer.config import OptimizedConfig
 
         config = OptimizedConfig(
-            config={
-                "prompts": {"format_instructions": ["Format 1", "Format 2"]}
-            }
+            config={"prompts": {"format_instructions": ["Format 1", "Format 2"]}}
         )
 
         assert config.format_instructions == ["Format 1", "Format 2"]
@@ -352,8 +354,8 @@ class TestOptimizationRunDetails:
         )
 
         run = prov.runs[0]
-        assert run.role_definition_changed == True
-        assert run.format_instructions_changed == True
+        assert run.role_definition_changed
+        assert run.format_instructions_changed
         assert run.optimizer_config["max_bootstrapped_demos"] == 4
         assert run.optimizer_config["mipro_auto"] == "medium"
 
@@ -364,8 +366,8 @@ class TestSaveTrainingExamples:
     def test_save_and_reload(self):
         from fair_prompt_optimizer.config import (
             TrainingExample,
-            save_training_examples,
             load_training_examples,
+            save_training_examples,
         )
 
         examples = [
@@ -418,7 +420,7 @@ class TestOptimizedConfigFromDict:
 
         config = OptimizedConfig.from_dict(data)
 
-        assert config.optimization.optimized == True
+        assert config.optimization.optimized
         assert len(config.optimization.runs) == 1
         assert config.optimization.runs[0].optimizer == "bootstrap"
 
@@ -428,7 +430,7 @@ class TestOptimizedConfigFromDict:
         data = {"prompts": {}}
         config = OptimizedConfig.from_dict(data)
 
-        assert config.optimization.optimized == False
+        assert not config.optimization.optimized
 
 
 class TestComputeFileHashEdgeCases:

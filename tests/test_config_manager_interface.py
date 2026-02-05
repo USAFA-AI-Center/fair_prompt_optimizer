@@ -83,36 +83,36 @@ def test_config_manager_interface():
         from fairlib import (
             HuggingFaceAdapter,
             SimpleAgent,
-            ToolRegistry,
             ToolExecutor,
+            ToolRegistry,
             WorkingMemory,
         )
-        from fairlib.modules.planning.react_planner import ReActPlanner
         from fairlib.core.prompts import (
+            Example,
+            FormatInstruction,
             PromptBuilder,
             RoleDefinition,
             ToolInstruction,
             WorkerInstruction,
-            FormatInstruction,
-            Example,
         )
         from fairlib.modules.action.tools.builtin_tools.safe_calculator import SafeCalculatorTool
         from fairlib.modules.agent.multi_agent_runner import HierarchicalAgentRunner
+        from fairlib.modules.planning.react_planner import ReActPlanner
 
         # Import config_manager functions
         from fairlib.utils.config_manager import (
-            extract_prompts,
+            _get_tool_registry,
             apply_prompts,
             extract_config,
-            save_agent_config,
-            load_agent_config,
-            load_agent,
-            load_prompts_into_agent,
             extract_multi_agent_config,
-            save_multi_agent_config,
-            load_multi_agent,
+            extract_prompts,
+            load_agent,
+            load_agent_config,
             load_agent_from_config_dict,
-            _get_tool_registry,
+            load_multi_agent,
+            load_prompts_into_agent,
+            save_agent_config,
+            save_multi_agent_config,
         )
 
         print("  All imports successful")
@@ -153,8 +153,12 @@ def test_config_manager_interface():
         FormatInstruction("Use 'final_answer' tool when you have the solution."),
     ]
     original_builder.examples = [
-        Example("User: What is 2+2?\nAssistant: {\"thought\": \"Simple addition\", \"action\": {\"tool_name\": \"final_answer\", \"tool_input\": \"4\"}}"),
-        Example("User: Convert 5 miles to km\nAssistant: {\"thought\": \"Need conversion\", \"action\": {\"tool_name\": \"unit_converter\", \"tool_input\": \"5 miles to km\"}}"),
+        Example(
+            'User: What is 2+2?\nAssistant: {"thought": "Simple addition", "action": {"tool_name": "final_answer", "tool_input": "4"}}'
+        ),
+        Example(
+            'User: Convert 5 miles to km\nAssistant: {"thought": "Need conversion", "action": {"tool_name": "unit_converter", "tool_input": "5 miles to km"}}'
+        ),
     ]
 
     print("  Original PromptBuilder created with:")
@@ -192,42 +196,68 @@ def test_config_manager_interface():
     restored_builder = PromptBuilder()
     apply_prompts(prompts_dict, restored_builder)
 
-    check("role_definition restored",
-         restored_builder.role_definition is not None and
-         restored_builder.role_definition.text == original_builder.role_definition.text)
-    check("tool_instructions count restored",
-         len(restored_builder.tool_instructions) == len(original_builder.tool_instructions))
-    check("worker_instructions count restored",
-         len(restored_builder.worker_instructions) == len(original_builder.worker_instructions))
-    check("format_instructions count restored",
-         len(restored_builder.format_instructions) == len(original_builder.format_instructions))
-    check("examples count restored",
-         len(restored_builder.examples) == len(original_builder.examples))
+    check(
+        "role_definition restored",
+        restored_builder.role_definition is not None
+        and restored_builder.role_definition.text == original_builder.role_definition.text,
+    )
+    check(
+        "tool_instructions count restored",
+        len(restored_builder.tool_instructions) == len(original_builder.tool_instructions),
+    )
+    check(
+        "worker_instructions count restored",
+        len(restored_builder.worker_instructions) == len(original_builder.worker_instructions),
+    )
+    check(
+        "format_instructions count restored",
+        len(restored_builder.format_instructions) == len(original_builder.format_instructions),
+    )
+    check(
+        "examples count restored", len(restored_builder.examples) == len(original_builder.examples)
+    )
 
     # Verify content matches
-    check("tool_instructions[0].name matches",
-         restored_builder.tool_instructions[0].name == original_builder.tool_instructions[0].name)
-    check("worker_instructions[0].name matches",
-         restored_builder.worker_instructions[0].name == original_builder.worker_instructions[0].name)
-    check("format_instructions[0].text matches",
-         restored_builder.format_instructions[0].text == original_builder.format_instructions[0].text)
-    check("examples[0].text matches",
-         restored_builder.examples[0].text == original_builder.examples[0].text)
+    check(
+        "tool_instructions[0].name matches",
+        restored_builder.tool_instructions[0].name == original_builder.tool_instructions[0].name,
+    )
+    check(
+        "worker_instructions[0].name matches",
+        restored_builder.worker_instructions[0].name
+        == original_builder.worker_instructions[0].name,
+    )
+    check(
+        "format_instructions[0].text matches",
+        restored_builder.format_instructions[0].text
+        == original_builder.format_instructions[0].text,
+    )
+    check(
+        "examples[0].text matches",
+        restored_builder.examples[0].text == original_builder.examples[0].text,
+    )
 
     print_subsection("Round-trip verification")
 
     # Extract again and compare
     restored_dict = extract_prompts(restored_builder)
-    check("round-trip role_definition matches",
-         restored_dict["role_definition"] == prompts_dict["role_definition"])
-    check("round-trip tool_instructions matches",
-         restored_dict["tool_instructions"] == prompts_dict["tool_instructions"])
-    check("round-trip worker_instructions matches",
-         restored_dict["worker_instructions"] == prompts_dict["worker_instructions"])
-    check("round-trip format_instructions matches",
-         restored_dict["format_instructions"] == prompts_dict["format_instructions"])
-    check("round-trip examples matches",
-         restored_dict["examples"] == prompts_dict["examples"])
+    check(
+        "round-trip role_definition matches",
+        restored_dict["role_definition"] == prompts_dict["role_definition"],
+    )
+    check(
+        "round-trip tool_instructions matches",
+        restored_dict["tool_instructions"] == prompts_dict["tool_instructions"],
+    )
+    check(
+        "round-trip worker_instructions matches",
+        restored_dict["worker_instructions"] == prompts_dict["worker_instructions"],
+    )
+    check(
+        "round-trip format_instructions matches",
+        restored_dict["format_instructions"] == prompts_dict["format_instructions"],
+    )
+    check("round-trip examples matches", restored_dict["examples"] == prompts_dict["examples"])
 
     # =========================================================================
     # TEST 2: Single Agent Config
@@ -257,7 +287,7 @@ def test_config_manager_interface():
             FormatInstruction("Respond with JSON containing 'thought' and 'action'."),
         ]
         agent_builder.examples = [
-            Example("Example: 2+2 -> {\"thought\": \"add\", \"action\": {...}}"),
+            Example('Example: 2+2 -> {"thought": "add", "action": {...}}'),
         ]
 
         # Create planner and agent
@@ -286,12 +316,14 @@ def test_config_manager_interface():
         check("config has metadata section", "metadata" in config)
 
         # Check prompts section
-        check("prompts.role_definition present",
-             config["prompts"].get("role_definition") is not None)
-        check("prompts.format_instructions present",
-             len(config["prompts"].get("format_instructions", [])) > 0)
-        check("prompts.examples present",
-             len(config["prompts"].get("examples", [])) > 0)
+        check(
+            "prompts.role_definition present", config["prompts"].get("role_definition") is not None
+        )
+        check(
+            "prompts.format_instructions present",
+            len(config["prompts"].get("format_instructions", [])) > 0,
+        )
+        check("prompts.examples present", len(config["prompts"].get("examples", [])) > 0)
 
         # Check model section
         check("model.adapter present", "adapter" in config["model"])
@@ -299,8 +331,10 @@ def test_config_manager_interface():
 
         # Check agent section
         check("agent.agent_type present", config["agent"].get("agent_type") == "SimpleAgent")
-        check("agent.tools includes SafeCalculatorTool",
-             "SafeCalculatorTool" in config["agent"].get("tools", []))
+        check(
+            "agent.tools includes SafeCalculatorTool",
+            "SafeCalculatorTool" in config["agent"].get("tools", []),
+        )
         check("agent.max_steps present", config["agent"].get("max_steps") == 10)
 
         print_subsection("Testing save_agent_config() and load_agent_config()")
@@ -328,15 +362,18 @@ def test_config_manager_interface():
 
         check("load_agent returns SimpleAgent", isinstance(loaded_agent, SimpleAgent))
         check("loaded agent has planner", hasattr(loaded_agent, "planner"))
-        check("loaded agent has prompt_builder",
-             hasattr(loaded_agent.planner, "prompt_builder"))
+        check("loaded agent has prompt_builder", hasattr(loaded_agent.planner, "prompt_builder"))
 
         # Verify prompts were loaded correctly
         loaded_prompts = extract_prompts(loaded_agent.planner.prompt_builder)
-        check("loaded role_definition matches",
-             loaded_prompts["role_definition"] == config["prompts"]["role_definition"])
-        check("loaded format_instructions match",
-             loaded_prompts["format_instructions"] == config["prompts"]["format_instructions"])
+        check(
+            "loaded role_definition matches",
+            loaded_prompts["role_definition"] == config["prompts"]["role_definition"],
+        )
+        check(
+            "loaded format_instructions match",
+            loaded_prompts["format_instructions"] == config["prompts"]["format_instructions"],
+        )
 
         print_subsection("Testing load_prompts_into_agent()")
 
@@ -346,17 +383,21 @@ def test_config_manager_interface():
         modified_config["prompts"]["role_definition"] = "You are a MODIFIED math agent."
         modified_config["prompts"]["examples"] = ["MODIFIED example"]
 
-        with open(modified_config_path, 'w') as f:
+        with open(modified_config_path, "w") as f:
             json.dump(modified_config, f)
 
         # Load modified prompts into existing agent
         load_prompts_into_agent(str(modified_config_path), loaded_agent)
 
         updated_prompts = extract_prompts(loaded_agent.planner.prompt_builder)
-        check("load_prompts_into_agent updates role_definition",
-             updated_prompts["role_definition"] == "You are a MODIFIED math agent.")
-        check("load_prompts_into_agent updates examples",
-             "MODIFIED example" in updated_prompts["examples"])
+        check(
+            "load_prompts_into_agent updates role_definition",
+            updated_prompts["role_definition"] == "You are a MODIFIED math agent.",
+        )
+        check(
+            "load_prompts_into_agent updates examples",
+            "MODIFIED example" in updated_prompts["examples"],
+        )
 
     else:
         print("  Skipping agent tests (no LLM available)")
@@ -390,7 +431,9 @@ def test_config_manager_interface():
         summarizer_builder.role_definition = RoleDefinition("You summarize data.")
         summarizer_builder.format_instructions = [FormatInstruction("Respond in JSON.")]
 
-        summarizer_planner = ReActPlanner(llm, summarizer_registry, prompt_builder=summarizer_builder)
+        summarizer_planner = ReActPlanner(
+            llm, summarizer_registry, prompt_builder=summarizer_builder
+        )
         summarizer = SimpleAgent(
             llm=llm,
             planner=summarizer_planner,
@@ -444,8 +487,10 @@ def test_config_manager_interface():
         # Check manager config structure
         manager_config = multi_config["manager"]
         check("manager has prompts", "prompts" in manager_config)
-        check("manager has worker_instructions",
-             len(manager_config["prompts"].get("worker_instructions", [])) == 2)
+        check(
+            "manager has worker_instructions",
+            len(manager_config["prompts"].get("worker_instructions", [])) == 2,
+        )
 
         # Check worker config structure
         gatherer_config = multi_config["workers"]["DataGatherer"]
@@ -463,15 +508,19 @@ def test_config_manager_interface():
         with open(multi_config_path) as f:
             json_multi = json.load(f)
         check("saved multi config is valid JSON", json_multi is not None)
-        check("saved multi config preserves workers",
-             set(json_multi["workers"].keys()) == {"DataGatherer", "Summarizer"})
+        check(
+            "saved multi config preserves workers",
+            set(json_multi["workers"].keys()) == {"DataGatherer", "Summarizer"},
+        )
 
         print_subsection("Testing load_multi_agent()")
 
         loaded_runner = load_multi_agent(str(multi_config_path), llm)
 
-        check("load_multi_agent returns HierarchicalAgentRunner",
-             isinstance(loaded_runner, HierarchicalAgentRunner))
+        check(
+            "load_multi_agent returns HierarchicalAgentRunner",
+            isinstance(loaded_runner, HierarchicalAgentRunner),
+        )
         check("loaded runner has manager", hasattr(loaded_runner, "manager"))
         check("loaded runner has workers", hasattr(loaded_runner, "workers"))
         check("loaded runner has correct worker count", len(loaded_runner.workers) == 2)
@@ -480,8 +529,11 @@ def test_config_manager_interface():
 
         # Verify manager prompts
         loaded_manager_prompts = extract_prompts(loaded_runner.manager.planner.prompt_builder)
-        check("loaded manager role_definition matches",
-             loaded_manager_prompts["role_definition"] == manager_config["prompts"]["role_definition"])
+        check(
+            "loaded manager role_definition matches",
+            loaded_manager_prompts["role_definition"]
+            == manager_config["prompts"]["role_definition"],
+        )
 
         print_subsection("Testing load_agent_from_config_dict()")
 
@@ -489,12 +541,16 @@ def test_config_manager_interface():
         worker_config = multi_config["workers"]["DataGatherer"]
         rebuilt_worker = load_agent_from_config_dict(worker_config, llm)
 
-        check("load_agent_from_config_dict returns SimpleAgent",
-             isinstance(rebuilt_worker, SimpleAgent))
+        check(
+            "load_agent_from_config_dict returns SimpleAgent",
+            isinstance(rebuilt_worker, SimpleAgent),
+        )
 
         rebuilt_prompts = extract_prompts(rebuilt_worker.planner.prompt_builder)
-        check("rebuilt worker has correct role_definition",
-             rebuilt_prompts["role_definition"] == "You gather data.")
+        check(
+            "rebuilt worker has correct role_definition",
+            rebuilt_prompts["role_definition"] == "You gather data.",
+        )
 
     else:
         print("  Skipping multi-agent tests (no LLM available)")
@@ -541,9 +597,11 @@ def test_config_manager_interface():
     another_builder.examples = [Example("Will be cleared")]
 
     apply_prompts(empty_prompts, another_builder)
-    check("apply_prompts preserves role_definition when new value is None",
-         another_builder.role_definition is not None and
-         another_builder.role_definition.text == "Will NOT be cleared")
+    check(
+        "apply_prompts preserves role_definition when new value is None",
+        another_builder.role_definition is not None
+        and another_builder.role_definition.text == "Will NOT be cleared",
+    )
     check("apply_prompts clears examples list", len(another_builder.examples) == 0)
 
     print_subsection("File not found handling")

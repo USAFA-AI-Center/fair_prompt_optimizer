@@ -18,35 +18,34 @@ Import from here or from individual submodules.
 """
 
 # Base utilities
-from .base import (
-    ROLE_START,
-    ROLE_END,
-    FORMAT_START,
-    FORMAT_END,
-    FORMAT_ITEM_START,
-    FORMAT_ITEM_END,
-    combine_prompt_components,
-    parse_optimized_prompt,
-    run_async,
-    clear_cuda_memory,
-)
-
-# Level 1: Simple LLM
-from .simple_llm import (
-    SimpleLLMModule,
-    SimpleLLMOptimizer,
-)
-
 # Level 2: Single Agent
 from .agent import (
     AgentModule,
     AgentOptimizer,
+)
+from .base import (
+    FORMAT_END,
+    FORMAT_ITEM_END,
+    FORMAT_ITEM_START,
+    FORMAT_START,
+    ROLE_END,
+    ROLE_START,
+    clear_cuda_memory,
+    combine_prompt_components,
+    parse_optimized_prompt,
+    run_async,
 )
 
 # Level 3: Multi-Agent
 from .multi_agent import (
     MultiAgentModule,
     MultiAgentOptimizer,
+)
+
+# Level 1: Simple LLM
+from .simple_llm import (
+    SimpleLLMModule,
+    SimpleLLMOptimizer,
 )
 
 __all__ = [

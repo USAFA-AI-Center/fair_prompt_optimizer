@@ -16,9 +16,9 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 import dspy
 
 from ..config import (
+    DSPyTranslator,
     OptimizedConfig,
     TrainingExample,
-    DSPyTranslator,
     compute_file_hash,
 )
 from .base import clear_cuda_memory
@@ -33,7 +33,13 @@ class SimpleLLMModule(dspy.Module):
     No agent pipeline, just direct LLM calls.
     """
 
-    def __init__(self, llm, system_prompt: str, input_field: str = "user_input", output_field: str = "response"):
+    def __init__(
+        self,
+        llm,
+        system_prompt: str,
+        input_field: str = "user_input",
+        output_field: str = "response",
+    ):
         """
         Initialize the SimpleLLM module.
 
@@ -84,9 +90,9 @@ class SimpleLLMModule(dspy.Module):
             ]
             response = self.llm.invoke(messages)
 
-            if hasattr(response, 'content'):
+            if hasattr(response, "content"):
                 result = response.content
-            elif hasattr(response, 'text'):
+            elif hasattr(response, "text"):
                 result = response.text
             else:
                 result = str(response)
@@ -99,7 +105,7 @@ class SimpleLLMModule(dspy.Module):
 
     def get_optimized_prompt(self) -> str:
         """Get the optimized system prompt (instructions) if available."""
-        if hasattr(self.predict, 'signature') and hasattr(self.predict.signature, 'instructions'):
+        if hasattr(self.predict, "signature") and hasattr(self.predict.signature, "instructions"):
             if self.predict.signature.instructions:
                 return self.predict.signature.instructions
         return self.system_prompt
@@ -107,9 +113,9 @@ class SimpleLLMModule(dspy.Module):
     def get_demos(self) -> List[Dict[str, str]]:
         """Extract demos from the predict object."""
         demos = []
-        if hasattr(self.predict, 'demos') and self.predict.demos:
+        if hasattr(self.predict, "demos") and self.predict.demos:
             for demo in self.predict.demos:
-                demo_dict = dict(demo) if hasattr(demo, '_store') else demo
+                demo_dict = dict(demo) if hasattr(demo, "_store") else demo
                 demos.append(demo_dict)
         return demos
 
@@ -143,15 +149,17 @@ class SimpleLLMOptimizer:
             # Extract model info from LLM adapter
             model_info = self._extract_model_info(llm)
 
-            self.config = OptimizedConfig(config={
-                "version": "1.0",
-                "type": "simple_llm",
-                "prompts": {
-                    "system_prompt": system_prompt,
-                    "examples": [],
-                },
-                "model": model_info,
-            })
+            self.config = OptimizedConfig(
+                config={
+                    "version": "1.0",
+                    "type": "simple_llm",
+                    "prompts": {
+                        "system_prompt": system_prompt,
+                        "examples": [],
+                    },
+                    "model": model_info,
+                }
+            )
 
         self._module = None
 
@@ -160,10 +168,12 @@ class SimpleLLMOptimizer:
         adapter_name = type(llm).__name__
 
         # Try to get model name from common attributes
-        model_name = getattr(llm, 'model_name', None) or \
-                     getattr(llm, 'model_id', None) or \
-                     getattr(llm, 'model', None) or \
-                     "unknown"
+        model_name = (
+            getattr(llm, "model_name", None)
+            or getattr(llm, "model_id", None)
+            or getattr(llm, "model", None)
+            or "unknown"
+        )
 
         return {
             "adapter": adapter_name,
@@ -178,7 +188,7 @@ class SimpleLLMOptimizer:
         optimizer: str = "bootstrap",
         max_bootstrapped_demos: int = 4,
         max_labeled_demos: int = 4,
-        mipro_auto: Literal['light', 'medium', 'heavy'] = 'light',
+        mipro_auto: Literal["light", "medium", "heavy"] = "light",
         training_data_path: Optional[str] = None,
         dspy_lm=None,
     ) -> OptimizedConfig:
@@ -208,13 +218,12 @@ class SimpleLLMOptimizer:
             raise ValueError("MIPROv2 requires dspy_lm parameter")
 
         # Initialize the DSPy module
-        module = SimpleLLMModule(
-            self.llm,
-            self.system_prompt
-        )
+        module = SimpleLLMModule(self.llm, self.system_prompt)
 
         # Convert to DSPy format
-        translator = DSPyTranslator(input_field=module.input_field, output_field=module.output_field)
+        translator = DSPyTranslator(
+            input_field=module.input_field, output_field=module.output_field
+        )
         dspy_examples = translator.to_dspy_examples(training_examples)
 
         # Track starting state
@@ -253,8 +262,8 @@ class SimpleLLMOptimizer:
         if demos:
             demo_parts = [new_prompt, "\n# Examples:"]
             for demo in demos:
-                inp = demo.get('user_input', '')
-                out = demo.get('response', '')
+                inp = demo.get("user_input", "")
+                out = demo.get("response", "")
                 demo_parts.append(f"Input: {inp}\nOutput: {out}")
             new_prompt = "\n".join(demo_parts)
 
@@ -264,9 +273,11 @@ class SimpleLLMOptimizer:
         # Record provenance
         self.config.optimization.record_run(
             optimizer=optimizer,
-            metric=metric.__name__ if hasattr(metric, '__name__') else str(metric),
+            metric=metric.__name__ if hasattr(metric, "__name__") else str(metric),
             training_data_path=training_data_path,
-            training_data_hash=compute_file_hash(training_data_path) if training_data_path else None,
+            training_data_hash=(
+                compute_file_hash(training_data_path) if training_data_path else None
+            ),
             num_examples=len(training_examples),
             examples_after=len(demos),
             role_definition_changed=(new_prompt != old_prompt),

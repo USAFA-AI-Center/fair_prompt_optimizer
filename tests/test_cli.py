@@ -6,10 +6,10 @@ Run with: pytest tests/test_cli.py -v
 """
 
 import json
+import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import sys
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -215,7 +215,7 @@ class TestCLIOptimize:
             "version": "1.0",
             "type": "simple_llm",
             "prompts": {"role_definition": "Test prompt"},
-            "model": {"adapter": "HuggingFaceAdapter", "model_name": "test-model"}
+            "model": {"adapter": "HuggingFaceAdapter", "model_name": "test-model"},
         }
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -254,7 +254,7 @@ class TestCLICreateLLM:
         # Mock the HuggingFaceAdapter at the fairlib module level
         with patch("fairlib.HuggingFaceAdapter") as mock_adapter:
             mock_adapter.return_value = Mock()
-            llm = create_llm(model_config)
+            create_llm(model_config)
             mock_adapter.assert_called_once_with("test-model")
 
     def test_create_llm_with_override(self):
@@ -268,7 +268,7 @@ class TestCLICreateLLM:
 
         with patch("fairlib.HuggingFaceAdapter") as mock_adapter:
             mock_adapter.return_value = Mock()
-            llm = create_llm(model_config, model_override="override-model")
+            create_llm(model_config, model_override="override-model")
             mock_adapter.assert_called_once_with("override-model")
 
     def test_create_llm_unknown_adapter(self):
@@ -291,10 +291,10 @@ class TestCLIMetricResolution:
         """Test that built-in metrics are accessible via getattr."""
         from fair_prompt_optimizer import metrics as metrics_module
         from fair_prompt_optimizer.metrics import (
-            exact_match,
             contains_answer,
-            numeric_accuracy,
+            exact_match,
             fuzzy_match,
+            numeric_accuracy,
         )
 
         assert getattr(metrics_module, "exact_match") == exact_match
@@ -316,7 +316,6 @@ class TestCLIMainParser:
     def test_help_does_not_crash(self):
         """Test that --help doesn't crash."""
         from fair_prompt_optimizer.cli import main
-        import sys
 
         with pytest.raises(SystemExit) as excinfo:
             with patch.object(sys, "argv", ["fair-optimize", "--help"]):
@@ -328,7 +327,6 @@ class TestCLIMainParser:
     def test_no_command_shows_help(self):
         """Test that no command shows help."""
         from fair_prompt_optimizer.cli import main
-        import sys
 
         with pytest.raises(SystemExit):
             with patch.object(sys, "argv", ["fair-optimize"]):
@@ -394,7 +392,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_config(str(config_path))
 
-            assert is_valid == True
+            assert is_valid
             assert len(errors) == 0
 
     def test_validate_config_missing_model(self):
@@ -414,7 +412,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_config(str(config_path))
 
-            assert is_valid == False
+            assert not is_valid
             assert any("model" in e.lower() for e in errors)
 
     def test_validate_config_placeholder_warning(self):
@@ -434,7 +432,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_config(str(config_path))
 
-            assert is_valid == True  # Warnings don't fail validation
+            assert is_valid  # Warnings don't fail validation
             assert any("placeholder" in w.lower() for w in warnings)
 
     def test_validate_training_valid(self):
@@ -453,7 +451,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_training_examples(str(training_path))
 
-            assert is_valid == True
+            assert is_valid
             assert len(errors) == 0
 
     def test_validate_training_missing_fields(self):
@@ -472,7 +470,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_training_examples(str(training_path))
 
-            assert is_valid == False
+            assert not is_valid
             assert len(errors) >= 2
 
     def test_validate_training_few_examples_warning(self):
@@ -490,7 +488,7 @@ class TestCLIValidate:
 
             is_valid, errors, warnings = validate_training_examples(str(training_path))
 
-            assert is_valid == True
+            assert is_valid
             assert any("recommend" in w.lower() or "only" in w.lower() for w in warnings)
 
     def test_validate_command(self):
@@ -531,18 +529,18 @@ class TestCLIColors:
         """Test that Colors class has color codes."""
         from fair_prompt_optimizer.cli import Colors
 
-        assert hasattr(Colors, 'RED')
-        assert hasattr(Colors, 'GREEN')
-        assert hasattr(Colors, 'RESET')
+        assert hasattr(Colors, "RED")
+        assert hasattr(Colors, "GREEN")
+        assert hasattr(Colors, "RESET")
 
     def test_print_helpers_dont_crash(self):
         """Test that print helpers work without crashing."""
         from fair_prompt_optimizer.cli import (
             print_error,
-            print_warning,
-            print_success,
             print_info,
             print_step,
+            print_success,
+            print_warning,
         )
 
         # These should not raise
