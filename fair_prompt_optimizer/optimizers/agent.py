@@ -152,9 +152,9 @@ class AgentModule(dspy.Module):
         clear_cuda_memory()
 
         try:
-            result = run_async(self.agent.arun(user_input))
+            result = run_async(self.agent.arun(user_input), timeout=300)
         except Exception as e:
-            logger.error(f"Agent error: {e}")
+            logger.error(f"Agent error during forward pass: {e}", exc_info=True)
             result = f"Error: {e}"
 
         return dspy.Prediction(**{self.output_field: result})
@@ -332,7 +332,7 @@ class AgentOptimizer:
                     training_examples, metric, dspy_lm, mipro_auto, max_labeled_demos
                 )
             except Exception:
-                logger.error("Encountered error in MIRPOv2 optimization, using old role definition")
+                logger.error("Encountered error in MIPROv2 optimization, using old role definition", exc_info=True)
 
         # Update config
         if optimized_prompts.role_definition_changed and optimized_prompts.role_definition:
@@ -395,6 +395,8 @@ class AgentOptimizer:
 
         selected = []
         module = AgentModule(self.agent)
+        consecutive_failures = 0
+        max_consecutive_failures = 5
 
         for ex in training_examples:
             if len(selected) >= max_demos:
@@ -417,6 +419,7 @@ class AgentOptimizer:
                 score = metric(dspy_example, prediction, None)
 
                 if score:
+                    consecutive_failures = 0
                     if ex.full_trace:
                         selected.append(ex.full_trace)
                         logger.info(f"Passed (full_trace): {user_input[:40]}...")
@@ -428,7 +431,11 @@ class AgentOptimizer:
                     logger.debug(f"Failed metric: {user_input[:40]}...")
 
             except Exception as e:
-                logger.warning(f"Agent failed on '{user_input[:30]}...': {e}")
+                logger.warning(f"Agent failed on '{user_input[:30]}...': {e}", exc_info=True)
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.error(f"Circuit breaker: {max_consecutive_failures} consecutive failures, stopping bootstrap")
+                    break
 
         logger.info(
             f"Bootstrap selected {len(selected)}/{min(len(training_examples), max_demos)} examples"

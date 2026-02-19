@@ -13,12 +13,15 @@ Usage:
 
 import argparse
 import json
+import logging
 import sys
 import threading
 import time
 from contextlib import nullcontext
 from pathlib import Path
 from typing import List, Tuple
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Terminal Output Helpers
@@ -675,6 +678,9 @@ def cmd_optimize(args):
 
     # Get metric function
     metric = getattr(metrics_module, args.metric)
+    if not callable(metric):
+        print(f"Error: '{args.metric}' is not a callable metric function")
+        sys.exit(1)
 
     # === Step 4: Create optimizer ===
     if not quiet:
@@ -812,8 +818,8 @@ def cmd_validate(args):
                 with_trace = sum(1 for ex in data if ex.get("full_trace"))
                 if with_trace > 0:
                     print_info(f"Examples with full_trace: {with_trace}")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error during validation check: {e}")
 
     # Summary
     print()

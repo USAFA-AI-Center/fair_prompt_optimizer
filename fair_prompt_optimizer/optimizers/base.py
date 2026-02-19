@@ -118,20 +118,27 @@ def parse_optimized_prompt(
     return result
 
 
-def run_async(coro):
+def run_async(coro, timeout=300):
     """
     Run an async coroutine from sync code.
 
     Handles the case where we might already be in an async context.
+
+    Args:
+        coro: The coroutine to run
+        timeout: Maximum seconds to wait (default: 300)
     """
+    async def _with_timeout():
+        return await asyncio.wait_for(coro, timeout=timeout)
+
     try:
         asyncio.get_running_loop()
         with ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, coro)
+            future = pool.submit(asyncio.run, _with_timeout())
             return future.result()
     except RuntimeError:
         # No running loop - safe to use asyncio.run
-        return asyncio.run(coro)
+        return asyncio.run(_with_timeout())
 
 
 def clear_cuda_memory():

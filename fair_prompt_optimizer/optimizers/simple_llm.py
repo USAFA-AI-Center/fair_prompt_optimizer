@@ -98,7 +98,7 @@ class SimpleLLMModule(dspy.Module):
                 result = str(response)
 
         except Exception as e:
-            logger.error(f"LLM error: {e}")
+            logger.error(f"LLM error during forward pass: {e}", exc_info=True)
             result = f"Error: {e}"
 
         return dspy.Prediction(**{self.output_field: result})

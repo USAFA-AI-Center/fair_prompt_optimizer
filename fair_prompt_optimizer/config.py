@@ -334,9 +334,17 @@ class TrainingExample:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TrainingExample":
+        inputs = data.get("inputs", {})
+        if not isinstance(inputs, dict):
+            raise ValueError(f"TrainingExample 'inputs' must be a dict, got {type(inputs).__name__}")
+
+        expected_output = data.get("expected_output", "")
+        if not isinstance(expected_output, str) or not expected_output.strip():
+            raise ValueError("TrainingExample 'expected_output' must be a non-empty string")
+
         return cls(
-            inputs=data.get("inputs", {}),
-            expected_output=data.get("expected_output", ""),
+            inputs=inputs,
+            expected_output=expected_output,
             full_trace=data.get("full_trace"),
         )
 
